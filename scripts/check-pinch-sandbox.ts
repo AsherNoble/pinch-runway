@@ -1,5 +1,5 @@
-import { PinchSandboxClient } from "../lib/pinch/client";
-import { getPinchReadiness, getPinchRuntimeConfig } from "../lib/pinch/config";
+import { PinchSandboxClient } from "../lib/pinch/client.ts";
+import { getPinchReadiness, getPinchRuntimeConfig } from "../lib/pinch/config.ts";
 
 async function main() {
   const config = getPinchRuntimeConfig();
