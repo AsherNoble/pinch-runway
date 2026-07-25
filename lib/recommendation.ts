@@ -4,7 +4,7 @@ import type {
   PaymentHistoryEntry,
   Payer,
   RecommendationAction,
-  ReliabilityBucket,
+  InvoiceWarningInputs,
   WaitRecommendationAction,
 } from "./contracts";
 import {
@@ -29,7 +29,8 @@ interface CollectionCandidate {
   covers_deficit: boolean;
   is_overdue: boolean;
   overdue_days: number;
-  reliability_priority: number;
+  warning_count: number;
+  warnings: InvoiceWarningInputs;
   selection_arrival_date: string;
 }
 
@@ -62,10 +63,20 @@ function compareIsoDates(left: string, right: string): number {
   return compareStrings(left, right);
 }
 
-function reliabilityPriority(reliability: ReliabilityBucket): number {
-  if (reliability === "sometimes_late") return 0;
-  if (reliability === "no_history") return 1;
-  return 2;
+function warningInputs(invoice: Invoice, today: string, invoices: readonly Invoice[]): InvoiceWarningInputs {
+  const overdue_days = Math.max(0, getCalendarDayDifference(invoice.due_date, today));
+  const stale_shared_reminder = !!invoice.reminder_shared_at &&
+    getCalendarDayDifference(invoice.reminder_shared_at.slice(0, 10), today) >= 2;
+  const unpaid = invoices.filter((candidate) => candidate.status === "unpaid");
+  const amounts = unpaid.map((candidate) => candidate.amount).sort((a, b) => a - b);
+  const median = amounts.length ? amounts[Math.floor(amounts.length / 2)] : invoice.amount;
+  return {
+    overdue_days,
+    pinch_dishonour: invoice.pinch_dishonoured === true,
+    stale_shared_reminder,
+    no_payment_method: invoice.payment_method_on_file === false,
+    unusually_old_or_large: overdue_days >= 14 || (amounts.length >= 3 && invoice.amount > median * 2),
+  };
 }
 
 function findSingleReliableCoverage(
@@ -158,19 +169,18 @@ function toCandidate(
   today: string,
   deficit: number,
   analysis: ForecastAnalysis,
+  invoices: readonly Invoice[],
 ): CollectionCandidate {
-  const overdueDays = Math.max(
-    0,
-    getCalendarDayDifference(invoice.due_date, today),
-  );
+  const warnings = warningInputs(invoice, today, invoices);
 
   return {
     invoice,
     payer,
     covers_deficit: invoice.amount >= deficit,
-    is_overdue: overdueDays > 0,
-    overdue_days: overdueDays,
-    reliability_priority: reliabilityPriority(payer.reliability),
+    is_overdue: warnings.overdue_days > 0,
+    overdue_days: warnings.overdue_days,
+    warning_count: Object.values(warnings).filter(Boolean).length,
+    warnings,
     selection_arrival_date: getSelectionArrivalDate(invoice, analysis),
   };
 }
@@ -191,8 +201,8 @@ function compareCandidates(
     return right.overdue_days - left.overdue_days;
   }
 
-  if (left.reliability_priority !== right.reliability_priority) {
-    return left.reliability_priority - right.reliability_priority;
+  if (left.warning_count !== right.warning_count) {
+    return right.warning_count - left.warning_count;
   }
 
   const bySelectionArrival = compareIsoDates(
@@ -221,15 +231,7 @@ export function getObservedLatenessText(
   payer: Payer,
   paymentHistory: readonly PaymentHistoryEntry[],
 ): string {
-  if (payer.reliability === "no_history") {
-    return "They have no payment history yet.";
-  }
-
-  if (payer.reliability === "never_late") {
-    return "Their recorded payment history is never late.";
-  }
-
-  const observedDaysLate = paymentHistory
+  const settled = paymentHistory
     .filter(
       (entry) =>
         entry.payer_id === payer.id &&
@@ -238,16 +240,12 @@ export function getObservedLatenessText(
     )
     .map((entry) => entry.days_late);
 
-  if (observedDaysLate.length === 0) {
-    return (
-      "Their observed average is about " +
-      Math.ceil(payer.avg_days_late ?? 0) +
-      " days late."
-    );
-  }
+  // Absence of history is not displayed as a signal; history is secondary
+  // context only after at least two settled invoices.
+  if (settled.length < 2) return "";
 
-  const earliest = Math.min(...observedDaysLate);
-  const latest = Math.max(...observedDaysLate);
+  const earliest = Math.min(...settled);
+  const latest = Math.max(...settled);
 
   if (earliest === latest) {
     return "Their observed payments were " + earliest + " days late.";
@@ -271,10 +269,12 @@ function buildCreatePaymentLinkRationale(
   const overdueText = candidate.is_overdue
     ? " It is " + candidate.overdue_days + " days overdue."
     : " It is due on " + candidate.invoice.due_date + ".";
-  const reliabilityText = getObservedLatenessText(
-    candidate.payer,
-    paymentHistory,
-  );
+  const warningLabels = [
+    candidate.warnings.pinch_dishonour && "a recorded Pinch dishonour",
+    candidate.warnings.stale_shared_reminder && "a shared reminder still unpaid after 48 hours",
+    candidate.warnings.no_payment_method && "no Pinch payment method or mandate on file",
+    candidate.warnings.unusually_old_or_large && "an unusually old or large invoice",
+  ].filter(Boolean);
   const consequence =
     analysis.state === "shortfall"
       ? " Even if all in-window invoices land, declared commitments still have a " +
@@ -289,8 +289,8 @@ function buildCreatePaymentLinkRationale(
     formatAud(candidate.invoice.amount) +
     " invoice today." +
     overdueText +
-    " " +
-    reliabilityText +
+    (warningLabels.length ? " Flagged for " + warningLabels.join(", ") + "." : "") +
+    (getObservedLatenessText(candidate.payer, paymentHistory) ? " " + getObservedLatenessText(candidate.payer, paymentHistory) : "") +
     consequence
   );
 }
@@ -320,7 +320,7 @@ function getCandidates(
         throw new Error("Forecast analysis contains an invoice with an unknown payer");
       }
 
-      return toCandidate(invoice, payer, input.today, deficit, analysis);
+      return toCandidate(invoice, payer, input.today, deficit, analysis, input.invoices);
     })
     .sort(compareCandidates);
 }

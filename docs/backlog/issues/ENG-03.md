@@ -1,18 +1,16 @@
 ## Goal
 
-Implement the reliability-weighted reasoning beat: decide whether to wait or
-which specific payer to chase, and state why.
+Implement deterministic invoice-flag reasoning: decide whether to wait or
+which specific invoice to target, and state why.
 
 **Priority:** P0 · **Lane:** engine · **Size:** M · **Live gate:** G3
 **Depends on:** ENG-02, RUN-02
 
 ## Acceptance criteria
 
-- [ ] Return `wait` when a timely never-late payer alone covers the relevant commitment.
-- [ ] Select a named payer when coverage depends on a late/unreliable collection, using deterministic tie-breakers.
-- [ ] Explain using only supplied payer names, amounts, due dates, and observed lateness.
-- [ ] Keep `no_history` genuinely unknown; do not invent an average, confidence, or score.
-- [ ] Add fixture assertions for both flagship beats and verify the integrated result against PIN-03 live data.
+- [ ] Rank a target from invoice warnings, never a payer score.
+- [ ] Possible in-window coverage determines `shortfall`; planned-coverage gaps determine `tight`.
+- [ ] Payer history, where available, remains secondary context only.
 
 ## Example outcome
 

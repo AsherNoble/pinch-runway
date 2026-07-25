@@ -422,10 +422,19 @@ function buildReceiptLedgers(
       );
     }
 
-    if (
-      payer.reliability === "never_late" &&
-      isWithinWindow(invoice.due_date, window)
-    ) {
+    const reminderIsStale =
+      !!invoice.reminder_shared_at &&
+      getCalendarDayDifference(invoice.reminder_shared_at.slice(0, 10), window.start) >= 2;
+    const hasPlannedCoverage =
+      isWithinWindow(invoice.due_date, window) &&
+      // Undefined is accepted only for legacy fixture records. Live adapter
+      // always supplies this field from GET /payers/{id}.
+      (invoice.payment_method_on_file === true ||
+        (invoice.payment_method_on_file === undefined && payer.reliability === "never_late")) &&
+      invoice.pinch_dishonoured !== true &&
+      !reminderIsStale;
+
+    if (hasPlannedCoverage) {
       const timelyReceipt = makeReceipt(invoice, payer, invoice.due_date);
       reliable.push(timelyReceipt);
       expected.push(timelyReceipt);

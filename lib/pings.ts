@@ -160,15 +160,14 @@ function targetCollectionConsequence(
     daysOverdue > 0
       ? " is " + daysOverdue + " days overdue."
       : " is due " + formatDate(target.invoice.due_date) + ".";
+  const history = getObservedLatenessText(target.payer, input.payment_history);
 
   return (
     target.payer.name +
     "'s " +
     formatAud(target.invoice.amount) +
     " invoice" +
-    dueText +
-    " " +
-    getObservedLatenessText(target.payer, input.payment_history)
+    dueText + (history ? " " + history : "")
   );
 }
 

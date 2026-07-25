@@ -20,7 +20,7 @@ export const MIN_COMFORTABLE_CUSHION_CENTS = 10_000;
 export const COMFORTABLE_CUSHION_DIVISOR = 10;
 
 export interface ForecastCoverageFloors {
-  /** Coverage using only timely invoices from never-late payers. */
+  /** Coverage using invoices with planned collection coverage. */
   reliable_floor: Cents;
   /** Coverage using the expected-arrival ledger. This becomes lowest_balance. */
   expected_floor: Cents;
@@ -101,6 +101,7 @@ export function deriveForecastState({
 }: ForecastCoverageFloors): ForecastState {
   if (total_commitments === 0) return "comfortable";
   if (optimistic_floor < 0) return "shortfall";
+  // Possible collection gaps are shortfalls; a planned-coverage gap is tight.
   if (reliable_floor < 0) return "tight";
   if (reliable_floor < getComfortableCushion(total_commitments)) {
     return "safe";

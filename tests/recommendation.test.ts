@@ -172,7 +172,7 @@ test("keeps a no-history payer genuinely unknown", () => {
 
   assert.equal(action.type, "create_payment_link");
   assert.equal(action.target_payer_id, "new");
-  assert.match(action.rationale, /no payment history yet/i);
+  assert.doesNotMatch(action.rationale, /payment history|days late/i);
   assert.doesNotMatch(action.rationale, /risky|likely|confidence|days late/i);
 });
 
@@ -237,4 +237,3 @@ test("does not turn a no-target shortfall into a sit-tight recommendation", () =
   assert.equal(result.recommended_action.reason, "no_collection_target");
   assert.match(result.recommended_action.rationale, /no unpaid Pinch invoice/i);
 });
-

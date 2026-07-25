@@ -132,7 +132,7 @@ test("does not describe no-history payers as late or risky", () => {
 
   assert.equal(ping.state, "tight");
   assert.equal(ping.cta.label, "Create Pinch payment link");
-  assert.match(renderedCopy, /no payment history yet/i);
+  assert.doesNotMatch(renderedCopy, /payment history|days late/i);
   assert.doesNotMatch(renderedCopy, /risky|likely|confidence|days late/i);
 });
 
@@ -158,4 +158,3 @@ test("labels a no-target forecast without telling the user to sit tight", () => 
   assert.equal(ping.cta.label, "No Pinch collection to target");
   assert.match(ping.consequence, /no known unpaid Pinch invoice/i);
 });
-

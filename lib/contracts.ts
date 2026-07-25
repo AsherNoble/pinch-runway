@@ -41,6 +41,23 @@ export interface Invoice {
   amount: Cents;
   due_date: IsoDate;
   status: InvoiceStatus;
+  /** Pinch Payer has an active payment source or agreement. */
+  payment_method_on_file?: boolean;
+  /** Normalised from a Pinch Payment or a verified webhook. */
+  pinch_dishonoured?: boolean;
+  /** Only set after the owner explicitly confirms they shared the link. */
+  reminder_shared_at?: IsoDateTime | null;
+  /** The provider Payment that represents this collection, when known. */
+  provider_payment_id?: string | null;
+}
+
+/** Inputs used to explain an invoice flag; none is a payer score. */
+export interface InvoiceWarningInputs {
+  overdue_days: number;
+  pinch_dishonour: boolean;
+  stale_shared_reminder: boolean;
+  no_payment_method: boolean;
+  unusually_old_or_large: boolean;
 }
 
 export interface WeeklyDrawExpense {
@@ -156,6 +173,12 @@ export interface PaymentHistoryEntry {
   due_date: IsoDate;
   paid_date: IsoDate;
   days_late: number;
+}
+
+export interface PayerHistoryDiagnostic {
+  eligible_payer_count: number;
+  live_book_payer_count: number;
+  eligible_percentage: number;
 }
 
 /**
