@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
-import { PinchSandboxClient } from "@/lib/pinch/client";
+import { PinchApiError, PinchSandboxClient } from "@/lib/pinch/client";
 import { getPinchRuntimeConfig } from "@/lib/pinch/config";
 import {
   getPinchSandboxSetupConfig,
@@ -40,15 +40,18 @@ export async function POST(request: Request) {
     return forbidden();
   }
 
+  let stage = "resolve the labelled Payer";
   try {
     const client = new PinchSandboxClient(getPinchRuntimeConfig());
     const payer = getRunwaySandboxTestPayer(payerKey);
     const providerPayerId = await resolvePayerId(client, payer.email_address);
+    stage = "create the Pinch Payment Source";
     const source = await client.createPaymentSource({
       payer_id: providerPayerId,
       token: captureToken,
     });
     const transactionDate = nextBusinessDate();
+    stage = "create the scheduled Pinch Payment";
     const payment = await client.createScheduledPayment({
       payer_id: providerPayerId,
       source_id: source.id,
@@ -69,9 +72,13 @@ export async function POST(request: Request) {
       },
       { headers: noStoreHeaders() },
     );
-  } catch {
+  } catch (error) {
+    const providerDetail =
+      error instanceof PinchApiError && error.status
+        ? ` Pinch returned status ${error.status}.`
+        : "";
     return message(
-      "Pinch sandbox source or scheduled Payment creation failed. No success was assumed.",
+      `Pinch sandbox could not ${stage}.${providerDetail} No success was assumed.`,
       502,
     );
   }
