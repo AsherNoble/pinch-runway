@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PinchReadiness } from "@/lib/pinch/config";
 import type { RunwayViewModel } from "@/lib/runway-view";
 import { PaymentLinkAction } from "./payment-link-action";
@@ -115,7 +116,7 @@ export function RunwayDashboard({
             their own clients through Pinch.
           </p>
           <p className="expense-nav">
-            <a href="/expenses">Receipt expenses</a>
+            <Link href="/expenses">Receipt expenses</Link>
           </p>
         </div>
         <div className={"connection-badge connection-" + readiness.state}>

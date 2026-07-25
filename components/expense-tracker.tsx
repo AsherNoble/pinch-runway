@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useTransition } from "react";
 import type { ExtractedExpense } from "@/lib/expenses";
 
@@ -122,7 +123,7 @@ export function ExpenseTracker() {
             confirm before it lands in the list.
           </p>
           <p className="expense-nav">
-            <a href="/">Back to Runway</a>
+            <Link href="/">Back to Runway</Link>
           </p>
         </div>
       </section>
