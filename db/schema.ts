@@ -22,3 +22,17 @@ export const pinchWebhookEvents = sqliteTable("pinch_webhook_events", {
   paymentId: text("payment_id"),
   status: text("status"),
 });
+
+/** Receipt-backed expenses; amounts are integer Australian cents. */
+export const expenses = sqliteTable("expenses", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  ownerEmail: text("owner_email").notNull(),
+  date: text("date").notNull(),
+  description: text("description").notNull(),
+  company: text("company").notNull(),
+  amountCents: integer("amount_cents").notNull(),
+  gstCents: integer("gst_cents").notNull(),
+  amountIncludesGst: integer("amount_includes_gst", { mode: "boolean" }).notNull(),
+  receiptR2Key: text("receipt_r2_key").notNull(),
+  createdAt: text("created_at").notNull(),
+});

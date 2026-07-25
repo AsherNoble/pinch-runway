@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { PinchReadiness } from "@/lib/pinch/config";
 import type { RunwayViewModel } from "@/lib/runway-view";
 import { PaymentLinkAction } from "./payment-link-action";
@@ -113,6 +114,9 @@ export function RunwayDashboard({
           <p className="hero-copy">
             A pings-first cash-flow companion for sole traders collecting from
             their own clients through Pinch.
+          </p>
+          <p className="expense-nav">
+            <Link href="/expenses">Receipt expenses</Link>
           </p>
         </div>
         <div className={"connection-badge connection-" + readiness.state}>
