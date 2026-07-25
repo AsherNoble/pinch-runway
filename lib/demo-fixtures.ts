@@ -191,9 +191,9 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
     ],
     expected_forecast: {
       state: "safe",
-      lowest_balance: 8000,
+      lowest_balance: 40000,
       cause:
-        "Demo Reliable Studio's $900 invoice covers the declared $650 draw and $170 BAS item, leaving an $80 projected margin.",
+        "Demo Reliable Studio's $900 invoice covers the declared $650 draw and $170 BAS item, leaving an $80 reliable margin; Demo Slow & Steady's expected collection lifts the planning margin to $400.",
       recommended_action: {
         type: "wait",
         target_payer_id: null,
@@ -370,9 +370,9 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
     ],
     expected_forecast: {
       state: "shortfall",
-      lowest_balance: -21000,
+      lowest_balance: -31000,
       cause:
-        "Even if Demo Late Client's $500 and Demo New Client's $100 invoices land on time, the declared $650 draw plus Friday's $160 BAS payment leaves $210 uncovered.",
+        "Expected coverage is $310 short. Even if Demo Late Client's $500 and Demo New Client's $100 invoices both land on time, the declared $650 draw plus Friday's $160 BAS payment still leaves $210 uncovered.",
       recommended_action: {
         type: "create_payment_link",
         target_payer_id: "demo-payer-late-client",
