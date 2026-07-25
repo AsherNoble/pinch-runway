@@ -64,6 +64,32 @@ export interface LumpyExpense {
 export type DeclaredExpense = WeeklyDrawExpense | LumpyExpense;
 
 /**
+ * The engine tells the UI whether it is reasonable to wait or whether the
+ * business owner should create a collection request for one known invoice.
+ *
+ * This deliberately identifies our shared invoice record rather than a
+ * provider-specific Pinch Payment or Payment Link. Lane A resolves it to the
+ * appropriate Pinch request when (and only when) that live action is used.
+ */
+export interface WaitRecommendationAction {
+  type: "wait";
+  target_payer_id: null;
+  target_invoice_id: null;
+  rationale: string;
+}
+
+export interface CreatePaymentLinkRecommendationAction {
+  type: "create_payment_link";
+  target_payer_id: Payer["id"];
+  target_invoice_id: Invoice["id"];
+  rationale: string;
+}
+
+export type RecommendationAction =
+  | WaitRecommendationAction
+  | CreatePaymentLinkRecommendationAction;
+
+/**
  * A forecast surplus/shortfall against declared commitments. Pinch Runway has
  * no bank-feed access, so lowest_balance must never be rendered as a bank
  * account balance.
@@ -73,7 +99,7 @@ export interface ForecastResult {
   /** Integer cents; negative values represent a projected shortfall. */
   lowest_balance: Cents;
   cause: string;
-  recommended_action: string;
+  recommended_action: RecommendationAction;
 }
 
 /**

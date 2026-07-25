@@ -87,3 +87,33 @@ test("demo fixtures include and preserve all payer reliability profiles", () => 
     }
   }
 });
+
+test("demo fixtures expose typed recommendation actions with valid targets", () => {
+  for (const scenario of DEMO_SCENARIOS) {
+    const action = scenario.expected_forecast.recommended_action;
+
+    assert.equal(typeof action.rationale, "string");
+    assert.ok(action.rationale.length > 0);
+
+    if (action.type === "wait") {
+      assert.equal(action.target_payer_id, null);
+      assert.equal(action.target_invoice_id, null);
+      continue;
+    }
+
+    assert.equal(action.type, "create_payment_link");
+    assert.ok(
+      scenario.payers.some((payer) => payer.id === action.target_payer_id),
+      `${scenario.id} action payer must exist in the same fixture`,
+    );
+    assert.ok(
+      scenario.invoices.some(
+        (invoice) =>
+          invoice.id === action.target_invoice_id &&
+          invoice.payer_id === action.target_payer_id &&
+          invoice.status === "unpaid",
+      ),
+      `${scenario.id} action invoice must be an unpaid invoice for its target payer`,
+    );
+  }
+});

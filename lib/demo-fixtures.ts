@@ -89,8 +89,13 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
       lowest_balance: 34000,
       cause:
         "Demo Reliable Studio's $990 invoice alone covers this week's declared $650 draw and they have never paid late.",
-      recommended_action:
-        "Sit tight — no need to touch your buffer or send a reminder today.",
+      recommended_action: {
+        type: "wait",
+        target_payer_id: null,
+        target_invoice_id: null,
+        rationale:
+          "Sit tight — no need to touch your buffer or create a payment link today.",
+      },
     },
   },
   {
@@ -189,8 +194,13 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
       lowest_balance: 8000,
       cause:
         "Demo Reliable Studio's $900 invoice covers the declared $650 draw and $170 BAS item, leaving an $80 projected margin.",
-      recommended_action:
-        "Sit tight — the reliable invoice is enough for this week's commitments.",
+      recommended_action: {
+        type: "wait",
+        target_payer_id: null,
+        target_invoice_id: null,
+        rationale:
+          "Sit tight — the reliable invoice is enough for this week's commitments.",
+      },
     },
   },
   {
@@ -267,8 +277,13 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
       lowest_balance: 4000,
       cause:
         "The only covering invoice is $930 from Demo Slow & Steady; it is overdue and their previous payments ran 5–9 days late.",
-      recommended_action:
-        "Send a reminder to Demo Slow & Steady now — waiting until next week leaves almost no room for the declared draw and insurance.",
+      recommended_action: {
+        type: "create_payment_link",
+        target_payer_id: "demo-payer-slow-steady",
+        target_invoice_id: "demo-invoice-slow-tight",
+        rationale:
+          "Create a payment link for Demo Slow & Steady now — waiting until next week leaves almost no room for the declared draw and insurance.",
+      },
     },
   },
   {
@@ -358,8 +373,13 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
       lowest_balance: -21000,
       cause:
         "Even if Demo Late Client's $500 and Demo New Client's $100 invoices land on time, the declared $650 draw plus Friday's $160 BAS payment leaves $210 uncovered.",
-      recommended_action:
-        "Chase Demo Late Client today, not Monday: their $500 invoice is four days overdue and their prior payments ran 5–9 days late.",
+      recommended_action: {
+        type: "create_payment_link",
+        target_payer_id: "demo-payer-late-client",
+        target_invoice_id: "demo-invoice-late-shortfall",
+        rationale:
+          "Create a payment link for Demo Late Client today, not Monday: their $500 invoice is four days overdue and their prior payments ran 5–9 days late.",
+      },
     },
   },
 ];

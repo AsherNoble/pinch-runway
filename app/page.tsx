@@ -77,7 +77,7 @@ export default function Home() {
             <p className="ping-kicker">This week’s call</p>
             <p className="ping-copy">{scenario.expected_forecast.cause}</p>
             <p className="ping-action">
-              {scenario.expected_forecast.recommended_action}
+              {scenario.expected_forecast.recommended_action.rationale}
             </p>
             <div className="ping-actions" aria-label="Live Pinch action status">
               <button type="button" disabled>
