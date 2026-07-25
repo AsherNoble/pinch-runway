@@ -108,6 +108,40 @@ export interface ForecastResult {
   recommended_action: RecommendationAction;
 }
 
+export type PingAmountRole =
+  | "reliable_invoice"
+  | "reliable_margin"
+  | "expected_margin"
+  | "optimistic_shortfall"
+  | "target_invoice";
+
+export type ForecastPingCta =
+  | {
+      label: "Sit tight";
+      action: WaitRecommendationAction & { reason: "reliable_coverage" };
+    }
+  | {
+      label: "No Pinch collection to target";
+      action: WaitRecommendationAction & { reason: "no_collection_target" };
+    }
+  | {
+      label: "Create Pinch payment link";
+      action: CreatePaymentLinkRecommendationAction;
+    };
+
+/** A concrete, source-grounded message for the pings-first interface. */
+export interface ForecastPing {
+  id: "weekly-forecast";
+  state: ForecastState;
+  text: string;
+  amount: {
+    cents: Cents;
+    role: PingAmountRole;
+  };
+  consequence: string;
+  cta: ForecastPingCta;
+}
+
 /**
  * A paid invoice record used only to derive a bilateral payer reliability
  * bucket. Days paid early are normalised to zero; this model records lateness,

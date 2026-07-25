@@ -217,7 +217,7 @@ function compareCandidates(
   return compareStrings(left.invoice.id, right.invoice.id);
 }
 
-function observedLatenessText(
+export function getObservedLatenessText(
   payer: Payer,
   paymentHistory: readonly PaymentHistoryEntry[],
 ): string {
@@ -271,7 +271,7 @@ function buildCreatePaymentLinkRationale(
   const overdueText = candidate.is_overdue
     ? " It is " + candidate.overdue_days + " days overdue."
     : " It is due on " + candidate.invoice.due_date + ".";
-  const reliabilityText = observedLatenessText(
+  const reliabilityText = getObservedLatenessText(
     candidate.payer,
     paymentHistory,
   );
