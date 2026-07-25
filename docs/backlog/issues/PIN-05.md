@@ -8,9 +8,9 @@ result to the frontend.
 
 ## Acceptance criteria
 
-- [ ] Accept a selected normalised payer/payment target and call the documented Pinch Payment Link/Payment endpoint.
+- [ ] Reload the selected current recommendation and call the documented Pinch Payment Link endpoint.
 - [ ] Return the real provider identifier, URL/status, and actionable error state.
-- [ ] Protect against duplicate clicks locally and use provider idempotency when documented/available.
+- [ ] Reuse same-day links through the action ledger; do not retry an unknown provider outcome automatically.
 - [ ] Never show success before Pinch confirms the response.
 - [ ] If Pinch creates but does not send a link, expose exactly that: “Payment link ready to share,” never “Sent via Pinch.”
 

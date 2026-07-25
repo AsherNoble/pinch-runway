@@ -1,5 +1,6 @@
 import type { PinchReadiness } from "@/lib/pinch/config";
 import type { RunwayViewModel } from "@/lib/runway-view";
+import { PaymentLinkAction } from "./payment-link-action";
 
 interface RunwayDashboardProps {
   view: RunwayViewModel;
@@ -73,10 +74,7 @@ function PingAction({
   if (cta.label === "Create Pinch payment link") {
     return (
       <div className="ping-actions" aria-label="Pinch payment link action status">
-        <button type="button" disabled>
-          {cta.label}
-        </button>
-        <span>Action wiring waits for the real sandbox endpoint.</span>
+        <PaymentLinkAction invoiceId={cta.action.target_invoice_id} />
       </div>
     );
   }
