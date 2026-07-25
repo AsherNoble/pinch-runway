@@ -1,5 +1,20 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "entries": []
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1750000000000,
+      "tag": "0000_collection_actions",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1753450000000,
+      "tag": "0001_expenses",
+      "breakpoints": true
+    }
+  ]
 }

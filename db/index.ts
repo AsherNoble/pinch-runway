@@ -13,3 +13,14 @@ export async function getDb() {
 
   return drizzle(env.DB, { schema });
 }
+
+export async function getReceiptsBucket() {
+  const { env } = await import("cloudflare:workers");
+  if (!env.RECEIPTS) {
+    throw new Error(
+      "Cloudflare R2 binding `RECEIPTS` is unavailable. Set the `r2` field in .openai/hosting.json to `RECEIPTS` or let your control plane inject the real binding values before using receipt storage."
+    );
+  }
+
+  return env.RECEIPTS as R2Bucket;
+}

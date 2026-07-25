@@ -114,6 +114,9 @@ export function RunwayDashboard({
             A pings-first cash-flow companion for sole traders collecting from
             their own clients through Pinch.
           </p>
+          <p className="expense-nav">
+            <a href="/expenses">Receipt expenses</a>
+          </p>
         </div>
         <div className={"connection-badge connection-" + readiness.state}>
           <span aria-hidden="true" className="status-dot" />
