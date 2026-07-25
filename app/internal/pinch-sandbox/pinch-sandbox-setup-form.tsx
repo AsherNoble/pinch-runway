@@ -292,16 +292,36 @@ function currentSetupToken(): string {
  */
 function describeCaptureError(error: unknown): string {
   if (error instanceof Error && error.message) return error.message;
+  if (typeof error === "string" && shortText(error)) {
+    return `Pinch CaptureJS tokenisation failed: ${shortText(error)}`;
+  }
   if (!isRecord(error)) return "Pinch sandbox setup failed before creating a Payment.";
 
-  const code = shortText(error.code) ?? shortText(error.errorCode);
-  const providerMessage = shortText(error.message) ?? shortText(error.errorDescription);
+  const nestedError = isRecord(error.error) ? error.error : undefined;
+  const firstError = Array.isArray(error.errors) && isRecord(error.errors[0])
+    ? error.errors[0]
+    : undefined;
+  const code =
+    shortText(error.code) ??
+    shortText(error.errorCode) ??
+    shortText(nestedError?.code) ??
+    shortText(firstError?.code);
+  const providerMessage =
+    shortText(error.message) ??
+    shortText(error.errorDescription) ??
+    shortText(nestedError?.message) ??
+    shortText(firstError?.message);
+  const type = shortText(error.type) ?? shortText(error.name) ?? shortText(nestedError?.type);
+  const status = typeof error.status === "number" ? error.status : undefined;
 
   if (code && providerMessage) {
     return `Pinch CaptureJS tokenisation failed (${code}): ${providerMessage}`;
   }
   if (code) return `Pinch CaptureJS tokenisation failed (${code}).`;
   if (providerMessage) return `Pinch CaptureJS tokenisation failed: ${providerMessage}`;
+  if (type && status) return `Pinch CaptureJS tokenisation failed (${type}, status ${status}).`;
+  if (type) return `Pinch CaptureJS tokenisation failed (${type}).`;
+  if (status) return `Pinch CaptureJS tokenisation failed (status ${status}).`;
   return "Pinch sandbox setup failed before creating a Payment.";
 }
 
