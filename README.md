@@ -100,15 +100,26 @@ rendered page. It intentionally does not perform a live sandbox call in CI.
 
 ## Team lanes
 
+There are exactly three lanes. Claim the first open issue in one lane, assign
+yourself on GitHub, and work forward through its dependencies rather than
+starting a second lane in parallel.
+
 | Lane | Owns | Starts with |
 | --- | --- | --- |
-| A — Pinch | authenticated live reads, normalisation, payment history/reliability, Payment Link write | `PIN-01` |
+| A — Pinch (**AsherNoble**) | authenticated live reads, normalisation, payment history/reliability, Payment Link write | [`PIN-01` / #4](https://github.com/AsherNoble/pinch-runway/issues/4) |
 | B — Engine | seven-day forecast policy, four states, payer-choice reasoning, ping copy | `ENG-01` |
 | C — Frontend | pings feed, declared-input flows, fallback dashboard, live action UX | `UX-01` |
 
-The ordered GitHub-ready issue bodies are in
+**Lane B:** start with [ENG-01 / #9](https://github.com/AsherNoble/pinch-runway/issues/9).
+
+**Lane C:** start with [UX-01 / #13](https://github.com/AsherNoble/pinch-runway/issues/13).
+
+Each issue is also labelled `lane:pinch`, `lane:engine`, or `lane:frontend`.
+The full dependency map remains in
 [`docs/backlog/`](docs/backlog/README.md). All checkpoint-critical work is
 marked `P0` and carries its live-sandbox gate.
+
+
 
 ## Tomorrow’s live gate
 
