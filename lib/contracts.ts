@@ -63,6 +63,11 @@ export interface LumpyExpense {
 
 export type DeclaredExpense = WeeklyDrawExpense | LumpyExpense;
 
+/** A wait can mean reliable coverage or that no known Pinch collection exists. */
+export type WaitRecommendationReason =
+  | "reliable_coverage"
+  | "no_collection_target";
+
 /**
  * The engine tells the UI whether it is reasonable to wait or whether the
  * business owner should create a collection request for one known invoice.
@@ -73,6 +78,7 @@ export type DeclaredExpense = WeeklyDrawExpense | LumpyExpense;
  */
 export interface WaitRecommendationAction {
   type: "wait";
+  reason: WaitRecommendationReason;
   target_payer_id: null;
   target_invoice_id: null;
   rationale: string;

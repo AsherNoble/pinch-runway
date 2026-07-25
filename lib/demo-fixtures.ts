@@ -91,6 +91,7 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
         "Demo Reliable Studio's $990 invoice alone covers this week's declared $650 draw and they have never paid late.",
       recommended_action: {
         type: "wait",
+        reason: "reliable_coverage",
         target_payer_id: null,
         target_invoice_id: null,
         rationale:
@@ -196,6 +197,7 @@ export const DEMO_SCENARIOS: readonly DemoScenario[] = [
         "Demo Reliable Studio's $900 invoice covers the declared $650 draw and $170 BAS item, leaving an $80 reliable margin; Demo Slow & Steady's expected collection lifts the planning margin to $400.",
       recommended_action: {
         type: "wait",
+        reason: "reliable_coverage",
         target_payer_id: null,
         target_invoice_id: null,
         rationale:

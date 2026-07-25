@@ -96,6 +96,7 @@ test("demo fixtures expose typed recommendation actions with valid targets", () 
     assert.ok(action.rationale.length > 0);
 
     if (action.type === "wait") {
+      assert.equal(action.reason, "reliable_coverage");
       assert.equal(action.target_payer_id, null);
       assert.equal(action.target_invoice_id, null);
       continue;

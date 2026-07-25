@@ -46,12 +46,12 @@ Let `cushion = max($100, ceil(total commitments / 10))` in cents. With no declar
 
 ## Recommendation and selection
 
-The action is a structured `wait` or `create_payment_link`; it never claims a payment was sent. Lane A resolves `create_payment_link` to an actual Pinch sandbox call.
+The action is a structured `wait` or `create_payment_link`; it never claims a payment was sent. A `wait` records whether it means reliable coverage or that there is no known Pinch collection to target, so the UI never mistakes the latter for “sit tight.” Lane A resolves `create_payment_link` to an actual Pinch sandbox call.
 
 1. Find the earliest commitment date where the reliable ledger is negative.
 2. If none exists, return `wait`. When one timely never-late invoice alone covers commitments by every relevant deadline, name that payer and say to sit tight.
 3. If a deficit exists, consider unpaid invoices nominally due on or before the at-risk date. If none exists, use unpaid invoices due by window end. If there are still none, return `wait` and say there is no known Pinch collection to target.
-4. Select one invoice by these stable tie-breakers: (a) its amount alone covers the deficit; (b) overdue first, then most days overdue; (c) payer bucket `sometimes_late`, then `no_history`, then `never_late`; (d) earlier expected arrival for observed-history payers, or earlier nominal due date for no history; (e) larger amount; (f) earlier due date, payer name, then invoice ID lexically.
+4. Select one invoice by these stable tie-breakers: (a) its amount alone covers the deficit; (b) overdue first, then most days overdue; (c) payer bucket `sometimes_late`, then `no_history`, then `never_late`; (d) earlier expected arrival for observed-history payers, falling back to nominal due date if their expected date has already passed, or earlier nominal due date for no history; (e) larger amount; (f) earlier due date, payer name, then invoice ID lexically.
 
 The third tie-breaker is prioritisation only. It is never a claim that a no-history payer is unreliable. Copy can cite observed late history; it may say only no history yet for a no-history payer.
 
