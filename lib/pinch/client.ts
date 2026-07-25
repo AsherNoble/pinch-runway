@@ -42,6 +42,41 @@ export interface CreatedPinchPayer {
   email_address?: string;
 }
 
+export interface CreatePinchPaymentSourceInput {
+  payer_id: string;
+  /** Opaque, short-lived CaptureJS token. Never bank-account details. */
+  token: string;
+}
+
+export interface CreatedPinchPaymentSource {
+  id: string;
+  raw_status?: string;
+}
+
+export interface CreatePinchScheduledPaymentInput {
+  payer_id: string;
+  source_id?: string;
+  /** Integer cents. */
+  amount: number;
+  description: string;
+  /** ISO calendar date: YYYY-MM-DD. */
+  transaction_date: string;
+  /** One-time provider idempotency value. */
+  nonce: string;
+}
+
+export interface CreatedPinchScheduledPayment {
+  id: string;
+  payer_id?: string;
+  transaction_date?: string;
+  raw_status?: string;
+}
+
+export interface PinchTimeTravelOptions {
+  /** UTC ISO timestamp, accepted only by this test-only client. */
+  time_travel_at?: string;
+}
+
 export interface CreatePinchPaymentLinkInput {
   /** Integer cents. */
   amount: number;
@@ -148,6 +183,80 @@ export class PinchSandboxClient {
     };
   }
 
+  async createPaymentSource(
+    input: CreatePinchPaymentSourceInput,
+  ): Promise<CreatedPinchPaymentSource> {
+    if (!input.payer_id.trim() || !input.token.trim()) {
+      throw new PinchApiError("A Payer ID and CaptureJS token are required for a Payment Source.");
+    }
+
+    const payload = await this.requestJson<unknown>(
+      `payers/${encodeURIComponent(input.payer_id)}/sources`,
+      {
+        method: "POST",
+        body: {
+          sourceType: "bank-account",
+          token: input.token,
+        },
+      },
+    );
+    const record = asRecord(payload, "Pinch returned an invalid Payment Source response.");
+    const embeddedSource = isRecord(record.source) ? record.source : undefined;
+    const id = optionalString(record.id) ?? optionalString(embeddedSource?.id);
+
+    if (!id) {
+      throw new PinchApiError(
+        "Pinch confirmed a response but it did not contain a Payment Source ID.",
+      );
+    }
+
+    return {
+      id,
+      raw_status: optionalString(record.status) ?? optionalString(embeddedSource?.status),
+    };
+  }
+
+  async createScheduledPayment(
+    input: CreatePinchScheduledPaymentInput,
+  ): Promise<CreatedPinchScheduledPayment> {
+    if (!input.payer_id.trim() || !input.description.trim() || !input.nonce.trim()) {
+      throw new PinchApiError("Scheduled Payment requires a Payer ID, description, and nonce.");
+    }
+    if (!Number.isInteger(input.amount) || input.amount <= 0) {
+      throw new PinchApiError("Scheduled Payment amount must be a positive integer number of cents.");
+    }
+    if (!isIsoCalendarDate(input.transaction_date)) {
+      throw new PinchApiError("Scheduled Payment transaction date must be YYYY-MM-DD.");
+    }
+
+    const payload = await this.requestJson<unknown>("payments", {
+      method: "POST",
+      body: {
+        payerId: input.payer_id,
+        ...(input.source_id ? { sourceId: input.source_id } : {}),
+        amount: input.amount,
+        description: input.description,
+        transactionDate: input.transaction_date,
+        nonce: input.nonce,
+      },
+    });
+    const record = asRecord(payload, "Pinch returned an invalid Scheduled Payment response.");
+    const id = optionalString(record.id);
+
+    if (!id) {
+      throw new PinchApiError(
+        "Pinch confirmed a response but it did not contain a Scheduled Payment ID.",
+      );
+    }
+
+    return {
+      id,
+      payer_id: optionalString(record.payerId),
+      transaction_date: optionalString(record.transactionDate),
+      raw_status: optionalString(record.status),
+    };
+  }
+
   async listScheduledPayments(
     options: PinchPageOptions = {},
   ): Promise<readonly JsonRecord[]> {
@@ -178,10 +287,14 @@ export class PinchSandboxClient {
     return extractCollection(payload, ["payments", "data", "items", "results"]);
   }
 
-  async getPayment(paymentId: string): Promise<JsonRecord> {
+  async getPayment(
+    paymentId: string,
+    options: PinchTimeTravelOptions = {},
+  ): Promise<JsonRecord> {
     if (!paymentId) throw new PinchApiError("A Pinch payment ID is required.");
     const payload = await this.requestJson<unknown>(
       `payments/${encodeURIComponent(paymentId)}`,
+      { time_travel_at: options.time_travel_at },
     );
     return asRecord(payload, "Pinch returned an invalid payment response.");
   }
@@ -240,6 +353,7 @@ export class PinchSandboxClient {
       method?: "GET" | "POST";
       query?: Record<string, string | number | undefined>;
       body?: JsonRecord;
+      time_travel_at?: string;
       retry_after_unauthorised?: boolean;
     } = {},
   ): Promise<T> {
@@ -249,12 +363,14 @@ export class PinchSandboxClient {
       if (value !== undefined) url.searchParams.set(key, String(value));
     }
 
+    const timeTravelAt = normaliseTimeTravelTimestamp(options.time_travel_at);
     const response = await this.fetchImplementation(url, {
       method: options.method ?? "GET",
       headers: {
         accept: "application/json",
         authorization: `Bearer ${accessToken}`,
         "pinch-version": this.config.api_version,
+        ...(timeTravelAt ? { "time-travel": timeTravelAt } : {}),
         ...(options.body ? { "content-type": "application/json" } : {}),
       },
       ...(options.body ? { body: JSON.stringify(options.body) } : {}),
@@ -365,4 +481,18 @@ function optionalString(value: unknown): string | undefined {
 
 function optionalInteger(value: unknown): number | undefined {
   return typeof value === "number" && Number.isInteger(value) ? value : undefined;
+}
+
+function isIsoCalendarDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function normaliseTimeTravelTimestamp(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (!value.endsWith("Z") || Number.isNaN(Date.parse(value))) {
+    throw new PinchApiError("Pinch Time Travel must be a valid UTC ISO timestamp.");
+  }
+  return new Date(value).toISOString();
 }

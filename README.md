@@ -104,6 +104,20 @@ The command reuses Payers with its fixed test email addresses, but every use of
 `--create-payment-link` deliberately creates a new link. Do not rerun that
 flag unless a new sandbox link is intended.
 
+### Internal G3 test-history tool
+
+`/internal/pinch-sandbox` is a deliberately hidden, off-by-default local tool
+for creating genuine test payment history. It requires all of the following
+server-only local settings before it exists: `PINCH_PUBLISHABLE_KEY` (which
+must start with `pk_test_`), `RUNWAY_ENABLE_SANDBOX_SETUP_UI=1`, and an operator
+token. The page passes only the publishable key to Pinch CaptureJS; documented
+test bank details are tokenised in the browser and never reach Runway's server.
+
+It may create real test sources and scheduled Payments, then uses Pinch's
+documented `Time-Travel` header only against the test API. It is neither
+enabled nor linked from the product, and it must stay disabled outside this
+local setup workflow.
+
 ## Development commands
 
 ```bash

@@ -1,23 +1,9 @@
 import { PinchSandboxClient } from "../lib/pinch/client.ts";
 import { getPinchReadiness, getPinchRuntimeConfig } from "../lib/pinch/config.ts";
+import { RUNWAY_SANDBOX_TEST_PAYERS } from "../lib/pinch/sandbox-fixtures.ts";
 
 const CONFIRMATION_FLAG = "--confirm-test-write";
 const CREATE_LINK_FLAG = "--create-payment-link";
-
-const RUNWAY_TEST_PAYERS = [
-  {
-    key: "reliable",
-    first_name: "Runway",
-    last_name: "Sandbox Reliable",
-    email_address: "runway-sandbox-reliable@example.com",
-  },
-  {
-    key: "delayed",
-    first_name: "Runway",
-    last_name: "Sandbox Delayed",
-    email_address: "runway-sandbox-delayed@example.com",
-  },
-] as const;
 
 const DEMO_LINK = {
   amount: 50_000,
@@ -44,7 +30,7 @@ async function main() {
   const existingPayers = await client.listPayers({ page: 1, page_size: 100 });
   const payerIds = new Map<string, string>();
 
-  for (const payer of RUNWAY_TEST_PAYERS) {
+  for (const payer of RUNWAY_SANDBOX_TEST_PAYERS) {
     const existing = existingPayers.find(
       (candidate) => payerEmail(candidate) === payer.email_address,
     );

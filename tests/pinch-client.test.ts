@@ -132,3 +132,70 @@ test("Pinch client creates a Payment Link and tolerates amountInCents", async ()
     raw_status: undefined,
   });
 });
+
+test("Pinch client attaches an opaque source, schedules a Payment, and scopes Time Travel to test", async () => {
+  resetPinchAccessTokenCacheForTests();
+  const mockFetch: typeof fetch = async (input, init) => {
+    const request = new Request(input, init);
+    if (request.url === "https://auth.getpinch.com.au/connect/token") {
+      return Response.json({ access_token: "access_token", expires_in: 3600 });
+    }
+
+    if (request.url === "https://api.getpinch.com.au/test/payers/pyr_001/sources") {
+      assert.equal(request.method, "POST");
+      assert.deepEqual(await request.json(), {
+        sourceType: "bank-account",
+        token: "opaque_capture_token",
+      });
+      return Response.json({ source: { id: "src_001", status: "active" } });
+    }
+
+    if (request.url === "https://api.getpinch.com.au/test/payments") {
+      assert.equal(request.method, "POST");
+      assert.deepEqual(await request.json(), {
+        payerId: "pyr_001",
+        sourceId: "src_001",
+        amount: 1_000,
+        description: "[RUNWAY-G3-SANDBOX] reliable direct-debit history probe",
+        transactionDate: "2026-07-27",
+        nonce: "runway-g3-test-nonce",
+      });
+      return Response.json({
+        id: "pmt_001",
+        payerId: "pyr_001",
+        transactionDate: "2026-07-27",
+        status: "pending",
+      });
+    }
+
+    assert.equal(request.url, "https://api.getpinch.com.au/test/payments/pmt_001");
+    assert.equal(request.headers.get("time-travel"), "2026-07-28T10:00:00.000Z");
+    return Response.json({ id: "pmt_001", status: "pending", attempts: [] });
+  };
+
+  const client = new PinchSandboxClient(config, mockFetch);
+  const source = await client.createPaymentSource({
+    payer_id: "pyr_001",
+    token: "opaque_capture_token",
+  });
+  const payment = await client.createScheduledPayment({
+    payer_id: "pyr_001",
+    source_id: source.id,
+    amount: 1_000,
+    description: "[RUNWAY-G3-SANDBOX] reliable direct-debit history probe",
+    transaction_date: "2026-07-27",
+    nonce: "runway-g3-test-nonce",
+  });
+  const result = await client.getPayment(payment.id, {
+    time_travel_at: "2026-07-28T10:00:00Z",
+  });
+
+  assert.deepEqual(source, { id: "src_001", raw_status: "active" });
+  assert.deepEqual(payment, {
+    id: "pmt_001",
+    payer_id: "pyr_001",
+    transaction_date: "2026-07-27",
+    raw_status: "pending",
+  });
+  assert.deepEqual(result, { id: "pmt_001", status: "pending", attempts: [] });
+});
