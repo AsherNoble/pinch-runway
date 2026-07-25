@@ -55,6 +55,36 @@ test("the policy classifies the four forecast states deterministically", () => {
   );
 });
 
+test("state boundaries do not turn zero coverage into a shortfall", () => {
+  assert.equal(
+    deriveForecastState({
+      reliable_floor: -1,
+      expected_floor: 0,
+      optimistic_floor: 0,
+      total_commitments: 10_000,
+    }),
+    "tight",
+  );
+  assert.equal(
+    deriveForecastState({
+      reliable_floor: 0,
+      expected_floor: 0,
+      optimistic_floor: 0,
+      total_commitments: 10_000,
+    }),
+    "safe",
+  );
+  assert.equal(
+    deriveForecastState({
+      reliable_floor: 10_000,
+      expected_floor: 10_000,
+      optimistic_floor: 10_000,
+      total_commitments: 10_000,
+    }),
+    "comfortable",
+  );
+});
+
 test("canonical fixtures cover every state and both action paths", () => {
   assert.equal(FORECAST_POLICY_EXAMPLES.length, 4);
 

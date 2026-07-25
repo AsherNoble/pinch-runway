@@ -17,7 +17,7 @@ The window is **today through today + 6 calendar days, inclusive**. If today is 
 - Lumpy items before today or after the window end are ignored. A later persistence lane can explicitly mark an old item paid, changed, or still outstanding; this pure engine does not guess.
 - Only `unpaid` invoices participate. The engine rejects malformed input, duplicate payer/invoice IDs, unknown invoice payers, invalid cent values, multiple or missing weekly draws, and an invalid `sometimes_late` estimate rather than making up data.
 
-At each commitment date, receipts scheduled on or before that date are totalled before commitments scheduled on or before it. Same-day receipts count for same-day commitments as a calendar-date planning assumption, not a settlement guarantee. The lowest result is that ledger's coverage floor.
+At each commitment date, receipts scheduled on or before that date are totalled before commitments scheduled on or before it. Same-day receipts count for same-day commitments as a calendar-date planning assumption, not a settlement guarantee. The lowest result at those commitment checkpoints is that ledger's coverage floor; the opening zero and receipt-only dates are not separate shortfall checks. With no commitments, the floor is zero.
 
 ## Reliability ledgers
 
