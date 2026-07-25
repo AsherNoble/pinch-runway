@@ -103,7 +103,7 @@ export function PinchSandboxSetupForm({ publishableKey }: PinchSandboxSetupFormP
         "A real sandbox Payment is scheduled. Advance the test clock below to trigger Pinch processing.",
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Pinch sandbox setup failed.");
+      setMessage(describeCaptureError(error));
     } finally {
       setBusy(false);
     }
@@ -281,4 +281,35 @@ function stringFormValue(form: FormData, key: string): string {
 function currentSetupToken(): string {
   const input = document.getElementById("sandbox-setup-token");
   return input instanceof HTMLInputElement ? input.value : "";
+}
+
+/**
+ * CaptureJS can reject with a plain provider object instead of an Error. Show
+ * only its short, non-sensitive code/message fields so a failed tokenisation
+ * is diagnosable without echoing any bank details or opaque tokens.
+ */
+function describeCaptureError(error: unknown): string {
+  if (error instanceof Error && error.message) return error.message;
+  if (!isRecord(error)) return "Pinch sandbox setup failed before creating a Payment.";
+
+  const code = shortText(error.code) ?? shortText(error.errorCode);
+  const providerMessage = shortText(error.message) ?? shortText(error.errorDescription);
+
+  if (code && providerMessage) {
+    return `Pinch CaptureJS tokenisation failed (${code}): ${providerMessage}`;
+  }
+  if (code) return `Pinch CaptureJS tokenisation failed (${code}).`;
+  if (providerMessage) return `Pinch CaptureJS tokenisation failed: ${providerMessage}`;
+  return "Pinch sandbox setup failed before creating a Payment.";
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function shortText(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > 180) return undefined;
+  return trimmed;
 }
