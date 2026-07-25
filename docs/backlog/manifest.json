@@ -1,0 +1,38 @@
+{
+  "label_definitions": {
+    "priority:P0": { "color": "B60205", "description": "Required for tomorrow's live checkpoint" },
+    "priority:P1": { "color": "FBCA04", "description": "Complete after the live checkpoint" },
+    "lane:platform": { "color": "1D76DB", "description": "Platform and deployment" },
+    "lane:shared": { "color": "5319E7", "description": "Shared contract or cross-lane QA" },
+    "lane:engine": { "color": "0E8A16", "description": "Forecast and reasoning engine" },
+    "lane:pinch": { "color": "D93F0B", "description": "Pinch sandbox integration" },
+    "lane:frontend": { "color": "006B75", "description": "Pings and dashboard UX" },
+    "live-sandbox": { "color": "E11D48", "description": "Must prove a real Pinch sandbox action" },
+    "gate:G1": { "color": "8B5CF6", "description": "Live primitive and field proof" },
+    "gate:G2": { "color": "8B5CF6", "description": "Live normalized snapshot proof" },
+    "gate:G3": { "color": "8B5CF6", "description": "Live reliability proof" },
+    "gate:G4": { "color": "8B5CF6", "description": "Live Pinch write proof" },
+    "gate:G5": { "color": "8B5CF6", "description": "Deployed live rehearsal proof" },
+    "size:S": { "color": "C2E0C6", "description": "Estimated at two hours or less" },
+    "size:M": { "color": "FEF2C0", "description": "Estimated at two to four hours" }
+  },
+  "issues": [
+    { "id": "RUN-01", "title": "[RUN-01] Verify deployable bootstrap, CI, and server-only secret boundary", "labels": ["priority:P0", "lane:platform", "live-sandbox", "size:S"], "body": "docs/backlog/issues/RUN-01.md" },
+    { "id": "RUN-02", "title": "[RUN-02] Lock the shared Runway contract and provider adapter boundary", "labels": ["priority:P0", "lane:shared", "size:S"], "body": "docs/backlog/issues/RUN-02.md" },
+    { "id": "RUN-03", "title": "[RUN-03] Create deterministic fixture and scenario library", "labels": ["priority:P0", "lane:engine", "size:S"], "body": "docs/backlog/issues/RUN-03.md" },
+    { "id": "PIN-01", "title": "[PIN-01] Prove Pinch sandbox capability and map real primitives", "labels": ["priority:P0", "lane:pinch", "live-sandbox", "gate:G1", "size:M"], "body": "docs/backlog/issues/PIN-01.md" },
+    { "id": "PIN-02", "title": "[PIN-02] Implement the server-side live Pinch snapshot adapter", "labels": ["priority:P0", "lane:pinch", "live-sandbox", "gate:G2", "size:M"], "body": "docs/backlog/issues/PIN-02.md" },
+    { "id": "PIN-03", "title": "[PIN-03] Derive paid history and payer reliability from live records", "labels": ["priority:P0", "lane:pinch", "live-sandbox", "gate:G3", "size:M"], "body": "docs/backlog/issues/PIN-03.md" },
+    { "id": "PIN-04", "title": "[PIN-04] Validate a demo-ready real Pinch sandbox data set", "labels": ["priority:P0", "lane:pinch", "live-sandbox", "gate:G3", "size:S"], "body": "docs/backlog/issues/PIN-04.md" },
+    { "id": "PIN-05", "title": "[PIN-05] Create a confirmed real Pinch Payment Link/payment request", "labels": ["priority:P0", "lane:pinch", "live-sandbox", "gate:G4", "size:M"], "body": "docs/backlog/issues/PIN-05.md" },
+    { "id": "ENG-01", "title": "[ENG-01] Commit the seven-day forecast policy and executable examples", "labels": ["priority:P0", "lane:engine", "size:S"], "body": "docs/backlog/issues/ENG-01.md" },
+    { "id": "ENG-02", "title": "[ENG-02] Implement the pure seven-day forecast engine", "labels": ["priority:P0", "lane:engine", "size:M"], "body": "docs/backlog/issues/ENG-02.md" },
+    { "id": "ENG-03", "title": "[ENG-03] Implement reliability-weighted payer-chase reasoning", "labels": ["priority:P0", "lane:engine", "gate:G3", "size:M"], "body": "docs/backlog/issues/ENG-03.md" },
+    { "id": "ENG-04", "title": "[ENG-04] Generate structured, consequence-led ping copy", "labels": ["priority:P0", "lane:engine", "size:S"], "body": "docs/backlog/issues/ENG-04.md" },
+    { "id": "UX-01", "title": "[UX-01] Build the source-swappable pings-first dashboard shell", "labels": ["priority:P0", "lane:frontend", "size:M"], "body": "docs/backlog/issues/UX-01.md" },
+    { "id": "UX-02", "title": "[UX-02] Persist declared weekly draw and lumpy expenses", "labels": ["priority:P1", "lane:frontend", "size:M"], "body": "docs/backlog/issues/UX-02.md" },
+    { "id": "UX-03", "title": "[UX-03] Build weekly check-in and lumpy-item entry flows", "labels": ["priority:P1", "lane:frontend", "size:S"], "body": "docs/backlog/issues/UX-03.md" },
+    { "id": "UX-04", "title": "[UX-04] Wire the live Pinch action CTA", "labels": ["priority:P0", "lane:frontend", "live-sandbox", "gate:G4", "size:S"], "body": "docs/backlog/issues/UX-04.md" },
+    { "id": "QA-01", "title": "[QA-01] Run the deployed live checkpoint rehearsal", "labels": ["priority:P0", "lane:shared", "live-sandbox", "gate:G5", "size:M"], "body": "docs/backlog/issues/QA-01.md" }
+  ]
+}
