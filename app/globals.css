@@ -189,6 +189,21 @@ h3 {
   background: var(--mint);
 }
 
+.state-safe {
+  color: #5e4a12;
+  background: #fff0c7;
+}
+
+.state-tight {
+  color: #8b4e17;
+  background: #ffe1b6;
+}
+
+.state-shortfall {
+  color: #7f271f;
+  background: #ffd8d1;
+}
+
 .demo-pill {
   border-color: #e5bc5e;
   padding: 8px 10px;
@@ -202,6 +217,18 @@ h3 {
   padding: clamp(24px, 4vw, 36px);
   color: #f7f4eb;
   background: linear-gradient(145deg, var(--forest), var(--forest-deep));
+}
+
+.ping-feed {
+  display: grid;
+  gap: 14px;
+}
+
+.secondary-ping {
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 20px;
+  background: #f8faf4;
 }
 
 .ping-kicker {
@@ -250,6 +277,18 @@ h3 {
 .ping-actions span {
   color: #a7c7ab;
   font-size: 0.78rem;
+}
+
+.ping-actions-status {
+  min-height: 22px;
+}
+
+.ping-status-label {
+  border: 1px solid rgba(220, 233, 217, 0.4);
+  border-radius: 999px;
+  padding: 6px 9px;
+  color: #dce9d9 !important;
+  font-weight: 750;
 }
 
 .check-in-card {
@@ -313,6 +352,44 @@ h3 {
   background: var(--line);
 }
 
+.snapshot-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.snapshot-state strong {
+  border-radius: 999px;
+  padding: 6px 9px;
+  font-size: 0.71rem;
+  text-transform: capitalize;
+}
+
+.snapshot-state-comfortable {
+  color: #103927;
+  background: var(--mint);
+}
+
+.snapshot-state-safe {
+  color: #5e4a12;
+  background: #fff0c7;
+}
+
+.snapshot-state-tight {
+  color: #8b4e17;
+  background: #ffe1b6;
+}
+
+.snapshot-state-shortfall {
+  color: #7f271f;
+  background: #ffd8d1;
+}
+
 .summary-row > div {
   min-width: 0;
   padding: 13px 11px;
@@ -322,6 +399,13 @@ h3 {
 .summary-row span,
 .summary-row strong {
   display: block;
+}
+
+.coverage-caption {
+  margin: -16px 0 25px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
 }
 
 .summary-row span {

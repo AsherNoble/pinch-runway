@@ -33,8 +33,11 @@ test("server-renders the Pinch Runway fixture dashboard", async () => {
   assert.match(html, /Pinch Runway/);
   assert.match(html, /Runway pings/);
   assert.match(html, /Demo data — not connected to Pinch/);
-  assert.match(html, /Create Pinch payment link/);
+  assert.match(html, /Demo Reliable Studio/);
+  assert.match(html, /Sit tight/);
+  assert.match(html, /Expected coverage floor/);
   assert.match(html, /Fixture preview/);
+  assert.doesNotMatch(html, /Create Pinch payment link/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Building your site/i);
 });
 
@@ -46,7 +49,8 @@ test("removes the disposable starter skeleton", async () => {
   ]);
 
   assert.doesNotMatch(page, /_sites-preview|SkeletonPreview|codex-preview/);
-  assert.match(page, /DEMO_SCENARIOS/);
+  assert.match(page, /getDemoRunwayView/);
+  assert.match(page, /RunwayDashboard/);
   assert.match(page, /getPinchReadiness/);
   assert.match(layout, /Pinch Runway/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
