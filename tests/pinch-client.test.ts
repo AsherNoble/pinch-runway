@@ -49,6 +49,44 @@ test("Pinch client authenticates server-side and lists Payers", async () => {
   assert.equal(requests.length, 2);
 });
 
+test("Pinch client creates a Payer only on the test API", async () => {
+  resetPinchAccessTokenCacheForTests();
+  const mockFetch: typeof fetch = async (input, init) => {
+    const request = new Request(input, init);
+    if (request.url === "https://auth.getpinch.com.au/connect/token") {
+      return Response.json({ access_token: "access_token", expires_in: 3600 });
+    }
+
+    assert.equal(request.url, "https://api.getpinch.com.au/test/payers");
+    assert.equal(request.method, "POST");
+    assert.deepEqual(await request.json(), {
+      firstName: "Runway",
+      lastName: "Sandbox Reliable",
+      emailAddress: "runway-sandbox-reliable@example.com",
+    });
+    return Response.json({
+      id: "pyr_001",
+      firstName: "Runway",
+      lastName: "Sandbox Reliable",
+      email: "runway-sandbox-reliable@example.com",
+    });
+  };
+
+  const client = new PinchSandboxClient(config, mockFetch);
+  const payer = await client.createPayer({
+    first_name: "Runway",
+    last_name: "Sandbox Reliable",
+    email_address: "runway-sandbox-reliable@example.com",
+  });
+
+  assert.deepEqual(payer, {
+    id: "pyr_001",
+    first_name: "Runway",
+    last_name: "Sandbox Reliable",
+    email_address: "runway-sandbox-reliable@example.com",
+  });
+});
+
 test("Pinch client creates a Payment Link and tolerates amountInCents", async () => {
   resetPinchAccessTokenCacheForTests();
   const mockFetch: typeof fetch = async (input, init) => {

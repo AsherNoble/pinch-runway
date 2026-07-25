@@ -24,11 +24,14 @@ The foundation is ready for three people to build against in parallel:
 - a CI workflow, environment template, live-sandbox runbook, and publish-ready
   issue backlog in `docs/backlog/`.
 
-The application has **not** made a live Pinch claim yet: no sandbox credentials
-were present in this workspace. Run `npm run check:pinch-sandbox` only after
-adding real sandbox credentials and setting `RUNWAY_DATA_SOURCE=sandbox`.
-That command makes an authenticated request to the real Pinch sandbox; it does
-not fall back to fixtures.
+The sandbox credential path has now made a real Payer read and a real Payment
+Link write; redacted proof is recorded in
+[`docs/pinch-sandbox-evidence.md`](docs/pinch-sandbox-evidence.md). The product
+UI remains an explicitly labelled fixture preview until Lane A completes the
+normalised live snapshot and reliability adapter. Run `npm run
+check:pinch-sandbox` only after adding real sandbox credentials and setting
+`RUNWAY_DATA_SOURCE=sandbox`. That command makes an authenticated request to
+the real Pinch sandbox; it does not fall back to fixtures.
 
 ## The hard Pinch boundary
 
@@ -85,6 +88,21 @@ is unconfigured or unavailable.
 
 Never put a Pinch secret in a `NEXT_PUBLIC_*` variable, browser request, test
 fixture, screenshot, or log.
+
+### Deliberate test-data bootstrap
+
+After the read-only check passes, this explicit, test-only command creates two
+labelled sandbox Payers. Adding the second flag creates one real sandbox
+Payment Link for the first Payer. It never calls Pinch's live base URL, never
+prints the returned link URL, and never sends a reminder or email.
+
+```bash
+npm run bootstrap:pinch-sandbox -- --confirm-test-write --create-payment-link
+```
+
+The command reuses Payers with its fixed test email addresses, but every use of
+`--create-payment-link` deliberately creates a new link. Do not rerun that
+flag unless a new sandbox link is intended.
 
 ## Development commands
 

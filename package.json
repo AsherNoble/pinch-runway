@@ -13,7 +13,8 @@
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
     "test:domain": "node --experimental-strip-types --test tests/*.test.ts",
-    "check:pinch-sandbox": "node --experimental-strip-types scripts/check-pinch-sandbox.ts",
+    "check:pinch-sandbox": "node --env-file=.env.local --experimental-strip-types scripts/check-pinch-sandbox.ts",
+    "bootstrap:pinch-sandbox": "node --env-file=.env.local --experimental-strip-types scripts/bootstrap-pinch-sandbox.ts",
     "publish:issues": "node scripts/publish-github-issues.mjs"
   },
   "dependencies": {

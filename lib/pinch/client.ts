@@ -28,6 +28,20 @@ export interface PinchPageOptions {
   page_size?: number;
 }
 
+export interface CreatePinchPayerInput {
+  first_name: string;
+  last_name: string;
+  email_address: string;
+  mobile_number?: string;
+}
+
+export interface CreatedPinchPayer {
+  id: string;
+  first_name?: string;
+  last_name?: string;
+  email_address?: string;
+}
+
 export interface CreatePinchPaymentLinkInput {
   /** Integer cents. */
   amount: number;
@@ -81,6 +95,13 @@ export class PinchSandboxClient {
       throw new PinchApiError("Pinch sandbox URL is invalid.");
     }
 
+    if (
+      this.apiBaseUrl.hostname !== "api.getpinch.com.au" ||
+      !this.apiBaseUrl.pathname.startsWith("/test/")
+    ) {
+      throw new PinchApiError("Pinch sandbox client can only call the Pinch test API.");
+    }
+
     this.config = config;
     this.fetchImplementation = fetchImplementation;
   }
@@ -93,6 +114,38 @@ export class PinchSandboxClient {
       },
     });
     return extractCollection(payload, ["payers", "data", "items", "results"]);
+  }
+
+  async createPayer(input: CreatePinchPayerInput): Promise<CreatedPinchPayer> {
+    if (!input.first_name.trim() || !input.last_name.trim() || !input.email_address.trim()) {
+      throw new PinchApiError("Payer requires a first name, last name, and email address.");
+    }
+
+    const payload = await this.requestJson<unknown>("payers", {
+      method: "POST",
+      body: {
+        firstName: input.first_name,
+        lastName: input.last_name,
+        emailAddress: input.email_address,
+        ...(input.mobile_number ? { mobileNumber: input.mobile_number } : {}),
+      },
+    });
+    const record = asRecord(payload, "Pinch returned an invalid Payer response.");
+    const id = optionalString(record.id);
+
+    if (!id) {
+      throw new PinchApiError(
+        "Pinch confirmed a response but it did not contain a Payer ID.",
+      );
+    }
+
+    return {
+      id,
+      first_name: optionalString(record.firstName),
+      last_name: optionalString(record.lastName),
+      email_address:
+        optionalString(record.emailAddress) ?? optionalString(record.email),
+    };
   }
 
   async listScheduledPayments(
