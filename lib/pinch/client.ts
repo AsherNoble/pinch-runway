@@ -151,6 +151,12 @@ export class PinchSandboxClient {
     return extractCollection(payload, ["payers", "data", "items", "results"]);
   }
 
+  async getPayer(payerId: string): Promise<JsonRecord> {
+    if (!payerId) throw new PinchApiError("A Pinch payer ID is required.");
+    const payload = await this.requestJson<unknown>(`payers/${encodeURIComponent(payerId)}`);
+    return asRecord(payload, "Pinch returned an invalid Payer response.");
+  }
+
   async createPayer(input: CreatePinchPayerInput): Promise<CreatedPinchPayer> {
     if (!input.first_name.trim() || !input.last_name.trim() || !input.email_address.trim()) {
       throw new PinchApiError("Payer requires a first name, last name, and email address.");
@@ -345,6 +351,16 @@ export class PinchSandboxClient {
       payer_id: optionalString(record.payerId) ?? optionalString(embeddedPayer?.id),
       raw_status: optionalString(record.status),
     };
+  }
+
+  async getPaymentLink(paymentLinkId: string): Promise<CreatedPinchPaymentLink> {
+    if (!paymentLinkId) throw new PinchApiError("A Pinch Payment Link ID is required.");
+    const record = asRecord(await this.requestJson<unknown>(`payment-links/${encodeURIComponent(paymentLinkId)}`), "Pinch returned an invalid Payment Link response.");
+    const id = optionalString(record.id);
+    const url = optionalString(record.url);
+    const amount = optionalInteger(record.amountInCents) ?? optionalInteger(record.amount);
+    if (!id || !url || amount === undefined) throw new PinchApiError("Pinch did not return the existing Payment Link details.");
+    return { id, url, amount, payer_id: optionalString(record.payerId), raw_status: optionalString(record.status) };
   }
 
   private async requestJson<T>(

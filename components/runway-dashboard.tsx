@@ -23,12 +23,10 @@ function formatDate(value: string) {
   }).format(new Date(value + "T12:00:00"));
 }
 
-function reliabilityLabel(reliability: string, averageDaysLate: number | null) {
-  if (reliability === "never_late") return "Never late";
-  if (reliability === "sometimes_late") {
-    return "Usually " + (averageDaysLate ?? "?") + " days late";
-  }
-  return "No history yet";
+function invoiceStatusLabel(invoice: RunwayViewModel["snapshot"]["invoices"][number]) {
+  if (invoice.pinch_dishonoured) return "Pinch dishonour recorded";
+  if (invoice.payment_method_on_file === false) return "No payment method on file";
+  return "Collection pending";
 }
 
 function sourceTag(view: RunwayViewModel) {
@@ -235,14 +233,10 @@ export function RunwayDashboard({
                       <strong>{formatAud(invoice.amount)}</strong>
                       <span
                         className={
-                          "reliability-tag " +
-                          (payer?.reliability ?? "no_history")
+                          "reliability-tag collection-pending"
                         }
                       >
-                        {reliabilityLabel(
-                          payer?.reliability ?? "no_history",
-                          payer?.avg_days_late ?? null,
-                        )}
+                        {invoiceStatusLabel(invoice)}
                       </span>
                     </div>
                   </li>
@@ -280,11 +274,10 @@ export function RunwayDashboard({
         </div>
         <ol>
           <li>Read real sandbox payers and collection payments.</li>
-          <li>Derive reliability from real successful payment attempts.</li>
+          <li>Read payment methods and verified Payment statuses.</li>
           <li>Create a real sandbox Payment Link and show its provider result.</li>
         </ol>
       </section>
     </main>
   );
 }
-
