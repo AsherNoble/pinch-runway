@@ -1,0 +1,12 @@
+{
+  "name": "pinch-runway",
+  "compatibility_date": "2026-07-25",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "pinch-runway",
+      "database_id": "353ed605-39d9-43f2-95ce-ad18090e6975",
+      "migrations_dir": "drizzle"
+    }
+  ]
+}

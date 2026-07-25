@@ -1,6 +1,9 @@
 import type { Invoice, Payer, RunwayDataSnapshot } from "../contracts";
+import { getDb } from "@/db";
 import { PinchSandboxClient } from "./client";
 import { getPinchRuntimeConfig } from "./config";
+import { applyLedgerSignals } from "./ledger-signals";
+import { readLedgerSignals } from "./ledger-store";
 
 type RecordValue = Record<string, unknown>;
 
@@ -37,4 +40,16 @@ export async function loadPinchSnapshot(today: string): Promise<RunwayDataSnapsh
     }
   }
   return { data_source: { source: "pinch_sandbox", connection_state: "connected", is_live: true, display_label: "Live Pinch sandbox data", last_synced_at: new Date().toISOString() }, payers, invoices, payment_history: [], declared_expenses: [{ id: "weekly-draw", type: "weekly_draw", amount: 1, due_date: null, note: "Configure your weekly draw" }] };
+}
+
+/**
+ * The live snapshot the dashboard and the collection action re-derive from,
+ * overlaid with the D1 ledgers (explicit share confirmations and verified
+ * webhook dishonours). Fixtures/demo never reach this path, so it stays free of
+ * D1 access.
+ */
+export async function loadLivePinchSnapshot(today: string): Promise<RunwayDataSnapshot> {
+  const snapshot = await loadPinchSnapshot(today);
+  const db = await getDb();
+  return applyLedgerSignals(snapshot, await readLedgerSignals(db));
 }
