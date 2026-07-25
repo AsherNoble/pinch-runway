@@ -65,7 +65,9 @@ export function PinchSandboxSetupForm({ publishableKey }: PinchSandboxSetupFormP
     const setupToken = stringFormValue(form, "setup_token");
     const payerKey = stringFormValue(form, "payer_key");
     const bankAccountName = stringFormValue(form, "bank_account_name");
-    const bankAccountRouting = stringFormValue(form, "bank_account_routing").replace(/\D/g, "");
+    // Preserve Pinch's documented `000-000` test BSB format. CaptureJS owns
+    // validation/tokenisation, so this value never passes through Runway.
+    const bankAccountRouting = stringFormValue(form, "bank_account_routing");
     const bankAccountNumber = stringFormValue(form, "bank_account_number").replace(/\s/g, "");
 
     setBusy(true);
@@ -215,7 +217,7 @@ export function PinchSandboxSetupForm({ publishableKey }: PinchSandboxSetupFormP
           Test BSB
           <input
             name="bank_account_routing"
-            defaultValue="000000"
+            defaultValue="000-000"
             inputMode="numeric"
             autoComplete="off"
             required
