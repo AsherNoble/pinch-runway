@@ -43,6 +43,7 @@ export interface AnthropicAgentOptions {
   maxIterations?: number;
   maxTranscriptMessages?: number;
   maxTokens?: number;
+  requestTimeoutMs?: number;
 }
 
 export interface AnthropicAgentTurn {
@@ -60,6 +61,16 @@ export class AgentLoopLimitError extends Error {
   constructor(limit: number) {
     super(`Anthropic tool loop exceeded the ${limit}-iteration limit`);
     this.name = "AgentLoopLimitError";
+  }
+}
+
+export class AnthropicMessagesError extends Error {
+  readonly status: number | undefined;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "AnthropicMessagesError";
+    this.status = status;
   }
 }
 
@@ -146,8 +157,12 @@ export async function runAnthropicAgentTurn(
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const maxIterations = options.maxIterations ?? 6;
   const transcriptLimit = options.maxTranscriptMessages ?? 8;
+  const requestTimeoutMs = options.requestTimeoutMs ?? 12_000;
   if (!Number.isSafeInteger(maxIterations) || maxIterations <= 0) {
     throw new Error("maxIterations must be a positive integer");
+  }
+  if (!Number.isSafeInteger(requestTimeoutMs) || requestTimeoutMs <= 0) {
+    throw new Error("requestTimeoutMs must be a positive integer");
   }
 
   const messages: AnthropicMessage[] = [
@@ -160,26 +175,45 @@ export async function runAnthropicAgentTurn(
   const requests: AgentToolRequest[] = [];
 
   for (let iteration = 1; iteration <= maxIterations; iteration += 1) {
-    const response = await fetchImpl(ANTHROPIC_MESSAGES_URL, {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-api-key": options.apiKey,
-        "anthropic-version": ANTHROPIC_VERSION,
-      },
-      body: JSON.stringify({
-        model: options.model,
-        max_tokens: options.maxTokens ?? 1_024,
-        system: options.systemPrompt ?? RUNWAY_AGENT_SYSTEM_PROMPT,
-        messages,
-        tools: options.tools,
-      }),
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+    let response: Response;
+    try {
+      response = await fetchImpl(ANTHROPIC_MESSAGES_URL, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": options.apiKey,
+          "anthropic-version": ANTHROPIC_VERSION,
+        },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: options.model,
+          max_tokens: options.maxTokens ?? 1_024,
+          system: options.systemPrompt ?? RUNWAY_AGENT_SYSTEM_PROMPT,
+          messages,
+          tools: options.tools,
+        }),
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new AnthropicMessagesError(
+          `Anthropic Messages request timed out after ${requestTimeoutMs}ms`,
+        );
+      }
+      throw new AnthropicMessagesError(
+        error instanceof Error
+          ? `Anthropic Messages request failed: ${error.message}`
+          : "Anthropic Messages request failed",
+      );
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
-      const detail = (await response.text()).slice(0, 500);
-      throw new Error(
-        `Anthropic Messages request failed (${response.status}): ${detail}`,
+      throw new AnthropicMessagesError(
+        `Anthropic Messages request failed with status ${response.status}`,
+        response.status,
       );
     }
 

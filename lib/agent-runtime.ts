@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { collectionActions } from "@/db/schema";
 import {
+  RUNWAY_AGENT_SYSTEM_PROMPT,
   buildAgentForecast,
   enforcePermission,
   type AgentForecastInput,
@@ -44,6 +45,10 @@ const DEMO_OPENING_CASH_CENTS = 2_640_000;
 const DEMO_DAILY_SPEND_CENTS = 20_000;
 const DEMO_RISK_BUFFER_CENTS = 700_000;
 const DEMO_INVOICE_ID = SEEDED_BUSINESS_PROFILE.overdue_invoice_id;
+const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
+const WHATSAPP_AGENT_SYSTEM_PROMPT = `${RUNWAY_AGENT_SYSTEM_PROMPT}
+
+You are replying to the owner in WhatsApp. Keep the final answer under 900 characters, lead with the answer, and use short paragraphs rather than tables. Use the financial snapshot or action-history tools whenever the answer depends on current business state. Do not call the owner-notification tool; the channel controller delivers your final response.`;
 
 export const RUNWAY_AGENT_TOOLS: readonly AgentToolDefinition[] = [
   {
@@ -119,6 +124,10 @@ export const RUNWAY_AGENT_TOOLS: readonly AgentToolDefinition[] = [
   },
 ] as const;
 
+const WHATSAPP_AGENT_TOOLS = RUNWAY_AGENT_TOOLS.filter(
+  (tool) => tool.name !== "send_owner_whatsapp",
+);
+
 interface RuntimeFinancialContext {
   forecast: AgentForecastResult;
   bank_provenance: Provenance;
@@ -178,7 +187,7 @@ export async function runProactiveDemoAgent(
               apiKey,
               model:
                 process.env.ANTHROPIC_MODEL?.trim() ??
-                "claude-sonnet-4-20250514",
+                DEFAULT_ANTHROPIC_MODEL,
               tools: RUNWAY_AGENT_TOOLS,
               executeTool: (request) => executeRuntimeTool(request, context, now),
               maxIterations: 6,
@@ -253,39 +262,56 @@ export async function runWhatsAppAgentTurn(input: {
   };
 
   try {
-    const transcript = (await recentAgentMessages(8))
-      .filter((message) => message.body.trim())
+    const transcript = (await recentAgentMessages(10))
+      .filter(
+        (message) =>
+          message.body.trim() &&
+          message.providerMessageId !== input.providerMessageId,
+      )
       .map<AgentTranscriptMessage>((message) => ({
         role: message.direction === "inbound" ? "user" : "assistant",
         content: message.body,
       }));
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-    const answer = apiKey
-      ? (
+    let provenance: StoredProvenance = "fallback";
+    let modelErrorCode: string | undefined;
+    let answer: string;
+    if (apiKey) {
+      try {
+        answer = (
           await runAnthropicAgentTurn(
             { message: input.body, transcript },
             {
               apiKey,
               model:
                 process.env.ANTHROPIC_MODEL?.trim() ??
-                "claude-sonnet-4-20250514",
-              tools: RUNWAY_AGENT_TOOLS,
+                DEFAULT_ANTHROPIC_MODEL,
+              tools: WHATSAPP_AGENT_TOOLS,
               executeTool: (request) => executeRuntimeTool(request, context, now),
+              systemPrompt: WHATSAPP_AGENT_SYSTEM_PROMPT,
               maxIterations: 5,
               maxTokens: 900,
             },
           )
-        ).text
-      : await groundedFallbackAnswer(input.body, context, now);
+        ).text;
+        provenance = "live";
+      } catch (error) {
+        modelErrorCode = error instanceof Error ? error.name : "unknown";
+        answer = await groundedFallbackAnswer(input.body, context, now);
+      }
+    } else {
+      answer = await groundedFallbackAnswer(input.body, context, now);
+    }
     const finalMessage =
       answer || "I could not find enough evidence to answer that safely.";
     await notifyOwner(finalMessage, context);
     await completeAgentRun({
       id: runId,
       status: "completed",
-      provenance: apiKey ? "live" : "fallback",
+      provenance,
       summary: finalMessage,
       forecast: context.financial?.forecast,
+      errorCode: modelErrorCode,
     });
     return { run_id: runId, message: finalMessage, duplicate: false };
   } catch (error) {
@@ -676,6 +702,7 @@ async function notifyOwner(
   body: string,
   context: RunContext,
 ): Promise<AgentToolResult> {
+  const channelBody = formatWhatsAppBody(body);
   const config = getTwilioWhatsAppConfig();
   const readiness = getTwilioWhatsAppReadiness(config);
   if (readiness.state !== "ready") {
@@ -683,7 +710,7 @@ async function notifyOwner(
       runId: context.id,
       channel: "whatsapp",
       direction: "outbound",
-      body,
+      body: channelBody,
     });
     context.ownerNotificationSent = true;
     return {
@@ -694,13 +721,13 @@ async function notifyOwner(
       provenance: "fallback",
     };
   }
-  const sent = await sendWhatsAppMessage({ body }, config);
+  const sent = await sendWhatsAppMessage({ body: channelBody }, config);
   await recordAgentMessage({
     runId: context.id,
     channel: "whatsapp",
     direction: "outbound",
     providerMessageId: sent.data.message_sid,
-    body,
+    body: channelBody,
   });
   context.ownerNotificationSent = true;
   return {
@@ -800,4 +827,10 @@ function formatAud(cents: number): string {
     currency: "AUD",
     maximumFractionDigits: 0,
   }).format(cents / 100);
+}
+
+function formatWhatsAppBody(value: string): string {
+  const body = value.trim();
+  if (body.length <= 1_500) return body;
+  return `${body.slice(0, 1_497).trimEnd()}…`;
 }
