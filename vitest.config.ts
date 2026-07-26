@@ -7,19 +7,23 @@ import { defineConfig } from "vitest/config";
 // suite runs against the real schema. We read the SQL rather than
 // readD1Migrations() because the Drizzle journal (drizzle/meta/_journal.json)
 // is intentionally minimal in this repo.
-const migrationSql = readFileSync(
-  fileURLToPath(new URL("./drizzle/0000_collection_actions.sql", import.meta.url)),
-  "utf8",
-);
 const migrations = [
-  {
-    name: "0000_collection_actions",
+  "0000_collection_actions",
+  "0001_resend_email_delivery",
+].map((name) => {
+  const migrationSql = readFileSync(
+    fileURLToPath(new URL(`./drizzle/${name}.sql`, import.meta.url)),
+    "utf8",
+  );
+
+  return {
+    name,
     queries: migrationSql
       .split("--> statement-breakpoint")
       .map((statement) => statement.trim())
       .filter((statement) => statement.length > 0),
-  },
-];
+  };
+});
 
 export default defineConfig({
   plugins: [

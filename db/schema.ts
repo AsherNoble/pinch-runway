@@ -11,6 +11,8 @@ export const collectionActions = sqliteTable("collection_actions", {
   reservedAt: text("reserved_at").notNull(),
   linkCreatedAt: text("link_created_at"),
   sharedAt: text("shared_at"),
+  resendEmailId: text("resend_email_id"),
+  emailedAt: text("emailed_at"),
   errorCode: text("error_code"),
   errorStatus: integer("error_status"),
 }, (table) => [uniqueIndex("collection_actions_invoice_day").on(table.invoiceId, table.actionDate)]);
