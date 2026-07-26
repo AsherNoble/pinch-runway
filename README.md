@@ -37,8 +37,10 @@ The command centre shows 13 weekly `cash_only` and
 `expected_with_receivables` paths. The model never calculates balances itself:
 deterministic code produces the forecast and ranked repair target, while
 Cloudflare Workers AI runs `@cf/zai-org/glm-4.7-flash` to choose among bounded
-tools and explain the evidence. Inference uses the `AI` binding and requires no
-model API key or additional SDK.
+tools and explain the evidence. A dedicated gateway Worker owns the native `AI`
+binding. The Sites application authenticates to that gateway with a server-side
+service token, so inference still requires no model-provider API key or
+additional SDK.
 
 ## Always-on agent demo
 
@@ -157,6 +159,8 @@ RUNWAY_TEST_RECIPIENT=
 RUNWAY_ENABLE_LIVE_DELIVERY=0
 
 RUNWAY_ENABLE_DEMO_AGENT=1
+WORKERS_AI_GATEWAY_URL=
+WORKERS_AI_GATEWAY_TOKEN=
 
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
@@ -188,6 +192,7 @@ npm run lint
 npm run test:domain
 npm run test:integration
 npm run build
+npm run check:ai-gateway
 npm test
 npx wrangler d1 migrations apply pinch-runway --local
 npx wrangler dev --test-scheduled

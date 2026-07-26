@@ -109,7 +109,7 @@ export function buildAgentCommandCenterModel(input: {
       {
         name: "Workers AI",
         status: "ready",
-        detail: "Cloudflare-bound GLM-4.7-Flash tool loop",
+        detail: "GLM-4.7-Flash via native binding or authenticated gateway",
         updatedAt: null,
         provenance: "live",
       },
