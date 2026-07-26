@@ -208,6 +208,11 @@ export async function runProactiveDemoAgent(
       provenance = "live";
     } catch (error) {
       modelErrorCode = error instanceof Error ? error.name : "unknown";
+      logModelFallback({
+        runId,
+        triggerType: "demo_event",
+        error,
+      });
       message = await runDeterministicDemoFallback(context, now);
     }
 
@@ -313,6 +318,11 @@ export async function runWhatsAppAgentTurn(input: {
       provenance = "live";
     } catch (error) {
       modelErrorCode = error instanceof Error ? error.name : "unknown";
+      logModelFallback({
+        runId,
+        triggerType: "whatsapp",
+        error,
+      });
       answer = await groundedFallbackAnswer(input.body, context, now);
     }
     const finalMessage =
@@ -337,6 +347,22 @@ export async function runWhatsAppAgentTurn(input: {
     });
     throw error;
   }
+}
+
+function logModelFallback(input: {
+  runId: string;
+  triggerType: "demo_event" | "whatsapp";
+  error: unknown;
+}): void {
+  console.error("agent.model.fallback", {
+    runId: input.runId,
+    triggerType: input.triggerType,
+    errorCode: input.error instanceof Error ? input.error.name : "unknown",
+    errorMessage:
+      input.error instanceof Error
+        ? input.error.message
+        : "Unknown model inference error",
+  });
 }
 
 async function executeRuntimeTool(
