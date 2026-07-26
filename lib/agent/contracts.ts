@@ -16,7 +16,43 @@ export type AgentToolName =
   | "get_action_history"
   | "create_pinch_payment_link"
   | "send_client_email"
+  | "update_calendar_event"
+  | "request_receipt"
   | "send_owner_whatsapp";
+
+/**
+ * Lifecycle of an action the owner set to "ask" in the permission panel.
+ *
+ * - `pending`   the agent proposed the action and stopped; it is waiting in the
+ *               approval queue for the owner.
+ * - `executing` an approval request claimed the row. This state exists so a
+ *               double-clicked Approve button cannot run the side effect twice;
+ *               the claim is a conditional UPDATE from `pending`.
+ * - `executed`  the owner approved and the side effect completed.
+ * - `denied`    the owner rejected it. The side effect never ran.
+ * - `failed`    the owner approved but the side effect itself failed.
+ */
+export type AgentApprovalStatus =
+  | "pending"
+  | "executing"
+  | "executed"
+  | "denied"
+  | "failed";
+
+export interface AgentApproval {
+  id: string;
+  run_id: string;
+  tool_call_id: string;
+  tool_name: AgentToolName;
+  action_class: ActionClass;
+  input: Readonly<Record<string, unknown>>;
+  /** Plain-language description of the side effect awaiting the owner. */
+  summary: string;
+  status: AgentApprovalStatus;
+  created_at: IsoDateTime;
+  decided_at: IsoDateTime | null;
+  result: unknown | null;
+}
 
 export type AgentRunStatus =
   | "queued"

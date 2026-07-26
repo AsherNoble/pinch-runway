@@ -1246,6 +1246,97 @@ h3 {
   margin-top: 20px;
 }
 
+/* Approval queue for actions parked by the "Ask me" permission mode. */
+.agent-approval-section {
+  margin-top: 20px;
+  border-color: #d9c48f;
+  background: linear-gradient(180deg, #fffaf0 0%, var(--paper, #fffdf8) 70%);
+}
+
+.agent-approval-list {
+  display: grid;
+  margin-top: 20px;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-approval-row {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 22px;
+  padding: 15px 0;
+}
+
+.agent-approval-row + .agent-approval-row {
+  border-top: 1px solid var(--line);
+}
+
+.agent-approval-row > div:first-child > strong {
+  font-size: 0.88rem;
+}
+
+.agent-approval-row p {
+  max-width: 660px;
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.agent-approval-row time {
+  display: block;
+  margin-top: 6px;
+  color: var(--muted);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.6rem;
+}
+
+.agent-approval-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+.agent-approval-actions button {
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 10px 15px;
+  font-size: 0.7rem;
+  font-weight: 750;
+}
+
+.agent-approval-actions .agent-approve {
+  color: #f8f6ef;
+  background: var(--forest);
+  box-shadow: 0 2px 7px rgba(23, 38, 31, 0.14);
+}
+
+.agent-approval-actions .agent-deny {
+  border-color: #c9cec4;
+  color: #68736c;
+  background: #eeefe9;
+}
+
+.agent-approval-actions button:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.agent-approval-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.agent-permission-note {
+  margin: 16px 0 0;
+  border-top: 1px solid var(--line);
+  padding-top: 15px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .agent-source-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

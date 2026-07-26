@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useState, type CSSProperties } from "react";
 
 export type AgentProvenance = "live" | "simulated" | "fallback";
@@ -58,6 +59,17 @@ export interface AgentCommandCenterViewModel {
     description: string;
     mode: AgentPermissionMode;
   }[];
+  /**
+   * Actions the agent proposed while their action class was set to "Ask me".
+   * They have not run. Each one needs an explicit owner decision.
+   */
+  approvals: readonly {
+    id: string;
+    actionClass: string;
+    label: string;
+    summary: string;
+    requestedAt: string;
+  }[];
   presenter?: {
     enabled: boolean;
     scenarioLabel: string;
@@ -68,6 +80,7 @@ export interface AgentCommandCenterViewModel {
 
 export interface AgentCommandCenterEndpoints {
   permission?: string;
+  approval?: string;
   trigger?: string;
   reset?: string;
 }
@@ -227,10 +240,20 @@ export function AgentCommandCenter({
     ) as Record<string, AgentPermissionMode>,
   );
   const [busyPermission, setBusyPermission] = useState<string | null>(null);
+  const [busyApproval, setBusyApproval] = useState<string | null>(null);
+  // Decisions are hidden immediately so a resolved action cannot be clicked
+  // twice while the server component re-renders.
+  const [resolvedApprovals, setResolvedApprovals] = useState<readonly string[]>(
+    [],
+  );
   const [presenterBusy, setPresenterBusy] = useState<"trigger" | "reset" | null>(
     null,
   );
   const [message, setMessage] = useState("");
+  const router = useRouter();
+  const pendingApprovals = model.approvals.filter(
+    (approval) => !resolvedApprovals.includes(approval.id),
+  );
 
   async function savePermission(
     actionClass: string,
@@ -265,6 +288,50 @@ export function AgentCommandCenter({
       );
     } finally {
       setBusyPermission(null);
+    }
+  }
+
+  /**
+   * Sends the owner's decision on a parked action. Approving runs the side
+   * effect server-side; this component never executes anything itself.
+   */
+  async function decideApproval(
+    approvalId: string,
+    decision: "approve" | "deny",
+  ) {
+    if (!endpoints.approval) return;
+    setBusyApproval(approvalId);
+    setMessage("");
+    try {
+      const response = await fetch(endpoints.approval, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ approvalId, decision }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        message?: string;
+      };
+      if (!response.ok) {
+        throw new Error(body.error ?? "Runway could not record that decision.");
+      }
+      setResolvedApprovals((current) => [...current, approvalId]);
+      setMessage(
+        body.message ??
+          (decision === "approve"
+            ? "Approved. Runway completed the action."
+            : "Action denied. Runway did not run it."),
+      );
+      // Pull the server state so the audit timeline reflects the new outcome.
+      router.refresh();
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Runway could not record that decision.",
+      );
+    } finally {
+      setBusyApproval(null);
     }
   }
 
@@ -442,6 +509,59 @@ export function AgentCommandCenter({
         </div>
       </section>
 
+      {pendingApprovals.length ? (
+        <section
+          aria-labelledby="agent-approval-title"
+          className="agent-panel agent-approval-section"
+        >
+          <div className="agent-card-heading">
+            <div>
+              <p className="eyebrow">Waiting on you</p>
+              <h2 id="agent-approval-title">
+                {pendingApprovals.length === 1
+                  ? "Runway paused one action for your decision"
+                  : `Runway paused ${pendingApprovals.length} actions for your decision`}
+              </h2>
+            </div>
+            {!endpoints.approval ? (
+              <span className="agent-unavailable">Controls not connected</span>
+            ) : null}
+          </div>
+          <ul className="agent-approval-list">
+            {pendingApprovals.map((approval) => (
+              <li className="agent-approval-row" key={approval.id}>
+                <div>
+                  <strong>{approval.label}</strong>
+                  <p>{approval.summary}</p>
+                  <time dateTime={approval.requestedAt}>
+                    Proposed {dateLabel(approval.requestedAt, true)} · nothing has
+                    run yet
+                  </time>
+                </div>
+                <div className="agent-approval-actions">
+                  <button
+                    className="agent-approve"
+                    disabled={!endpoints.approval || busyApproval === approval.id}
+                    onClick={() => void decideApproval(approval.id, "approve")}
+                    type="button"
+                  >
+                    {busyApproval === approval.id ? "Working…" : "Approve"}
+                  </button>
+                  <button
+                    className="agent-deny"
+                    disabled={!endpoints.approval || busyApproval === approval.id}
+                    onClick={() => void decideApproval(approval.id, "deny")}
+                    type="button"
+                  >
+                    Deny
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="agent-panel agent-permission-section">
         <div className="agent-card-heading">
           <div>
@@ -489,6 +609,10 @@ export function AgentCommandCenter({
             </div>
           ))}
         </div>
+        <p className="agent-permission-note">
+          Blocked stops the action outright. Ask me pauses it here for your
+          approval before anything happens. Auto lets Runway act and log it.
+        </p>
       </section>
 
       {model.presenter?.enabled ? (

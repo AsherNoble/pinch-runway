@@ -1,19 +1,23 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
+  agentApprovals,
   agentMessages,
   agentPermissions,
   agentRuns,
   agentToolCalls,
   demoAgentState,
+  simulatedCalendarEdits,
   simulatedOutbox,
 } from "@/db/schema";
 import type {
   ActionClass,
+  AgentApprovalStatus,
   PermissionMode,
   Provenance,
 } from "@/lib/agent/contracts";
 import type {
+  SeededCalendarEdit,
   SimulatedGmailOutboxMessage,
   SimulatedGmailOutboxStore,
 } from "@/lib/agent-integrations/google-seeded";
@@ -21,6 +25,7 @@ import type {
 export type StoredPermissionMode = PermissionMode;
 export type StoredActionClass = ActionClass;
 export type StoredProvenance = Provenance;
+export type StoredApprovalStatus = AgentApprovalStatus;
 
 export async function loadAgentPermissions(): Promise<
   Record<StoredActionClass, StoredPermissionMode>
@@ -110,6 +115,188 @@ export async function recordAgentToolCall(input: {
     createdAt: new Date().toISOString(),
   });
   return id;
+}
+
+export async function agentToolCallsForRun(runId: string) {
+  const rows = await (await getDb())
+    .select()
+    .from(agentToolCalls)
+    .where(eq(agentToolCalls.runId, runId))
+    .orderBy(agentToolCalls.createdAt);
+  return rows.map((row) => ({
+    ...row,
+    input: safelyParseJson(row.inputJson),
+    result: row.resultJson ? safelyParseJson(row.resultJson) : null,
+  }));
+}
+
+export async function updateAgentToolCall(input: {
+  id: string;
+  status: "proposed" | "awaiting_approval" | "succeeded" | "failed";
+  provenance?: StoredProvenance;
+  result?: unknown;
+}): Promise<void> {
+  await (await getDb())
+    .update(agentToolCalls)
+    .set({
+      status: input.status,
+      ...(input.provenance ? { provenance: input.provenance } : {}),
+      ...(input.result === undefined
+        ? {}
+        : { resultJson: JSON.stringify(input.result) }),
+    })
+    .where(eq(agentToolCalls.id, input.id));
+}
+
+/**
+ * Parks a proposed action in the owner's approval queue.
+ *
+ * Called only when the action class is set to "ask". Keyed on the audited tool
+ * call so a retry of the same proposal cannot enqueue it twice.
+ */
+export async function enqueueAgentApproval(input: {
+  runId: string;
+  toolCallId: string;
+  toolName: string;
+  actionClass: StoredActionClass;
+  toolInput: unknown;
+  summary: string;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  const inserted = await (await getDb())
+    .insert(agentApprovals)
+    .values({
+      id,
+      runId: input.runId,
+      toolCallId: input.toolCallId,
+      toolName: input.toolName,
+      actionClass: input.actionClass,
+      inputJson: JSON.stringify(input.toolInput),
+      summary: input.summary,
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    })
+    .onConflictDoNothing({ target: agentApprovals.toolCallId })
+    .returning({ id: agentApprovals.id });
+  if (inserted[0]) return inserted[0].id;
+  const [existing] = await (await getDb())
+    .select({ id: agentApprovals.id })
+    .from(agentApprovals)
+    .where(eq(agentApprovals.toolCallId, input.toolCallId))
+    .limit(1);
+  return existing?.id ?? id;
+}
+
+/**
+ * Atomically moves a pending approval to `executing` and returns it.
+ *
+ * The `status = 'pending'` predicate is the concurrency guard: two approve
+ * requests for the same action race on this UPDATE and exactly one sees a row,
+ * so a double-clicked Approve button cannot send the email twice. Returns null
+ * when the approval is missing or already decided.
+ */
+export async function claimAgentApproval(id: string) {
+  const claimed = await (await getDb())
+    .update(agentApprovals)
+    .set({ status: "executing", decidedAt: new Date().toISOString() })
+    .where(and(eq(agentApprovals.id, id), eq(agentApprovals.status, "pending")))
+    .returning();
+  const row = claimed[0];
+  if (!row) return null;
+  return { ...row, input: safelyParseJson(row.inputJson) };
+}
+
+export async function settleAgentApproval(input: {
+  id: string;
+  status: Exclude<StoredApprovalStatus, "pending" | "executing">;
+  result?: unknown;
+}): Promise<void> {
+  await (await getDb())
+    .update(agentApprovals)
+    .set({
+      status: input.status,
+      decidedAt: new Date().toISOString(),
+      ...(input.result === undefined
+        ? {}
+        : { resultJson: JSON.stringify(input.result) }),
+    })
+    .where(eq(agentApprovals.id, input.id));
+}
+
+/**
+ * Rejects a pending approval. Same conditional-UPDATE guard as the claim path,
+ * so denying an already-executed action is a no-op rather than a rewrite.
+ */
+export async function denyAgentApproval(id: string) {
+  const denied = await (await getDb())
+    .update(agentApprovals)
+    .set({ status: "denied", decidedAt: new Date().toISOString() })
+    .where(and(eq(agentApprovals.id, id), eq(agentApprovals.status, "pending")))
+    .returning();
+  return denied[0] ?? null;
+}
+
+export async function pendingAgentApprovals() {
+  const rows = await (await getDb())
+    .select()
+    .from(agentApprovals)
+    .where(eq(agentApprovals.status, "pending"))
+    .orderBy(agentApprovals.createdAt);
+  return rows.map((row) => ({ ...row, input: safelyParseJson(row.inputJson) }));
+}
+
+/**
+ * Records a simulated calendar mutation. See db/schema.ts
+ * `simulated_calendar_edits` for why edits are stored rather than sent.
+ */
+export async function recordSimulatedCalendarEdit(input: {
+  runId: string;
+  eventId: string;
+  summary?: string | null;
+  startDateTime?: string | null;
+  endDateTime?: string | null;
+  note?: string | null;
+}): Promise<SeededCalendarEdit> {
+  const row = {
+    id: crypto.randomUUID(),
+    runId: input.runId,
+    eventId: input.eventId,
+    summary: input.summary ?? null,
+    startDateTime: input.startDateTime ?? null,
+    endDateTime: input.endDateTime ?? null,
+    note: input.note ?? null,
+    createdAt: new Date().toISOString(),
+  };
+  await (await getDb()).insert(simulatedCalendarEdits).values(row);
+  return toSeededCalendarEdit(row);
+}
+
+export async function loadSimulatedCalendarEdits(): Promise<
+  readonly SeededCalendarEdit[]
+> {
+  const rows = await (await getDb())
+    .select()
+    .from(simulatedCalendarEdits)
+    .orderBy(simulatedCalendarEdits.createdAt);
+  return rows.map(toSeededCalendarEdit);
+}
+
+function toSeededCalendarEdit(row: {
+  eventId: string;
+  summary: string | null;
+  startDateTime: string | null;
+  endDateTime: string | null;
+  note: string | null;
+  createdAt: string;
+}): SeededCalendarEdit {
+  return {
+    event_id: row.eventId,
+    summary: row.summary,
+    start_date_time: row.startDateTime,
+    end_date_time: row.endDateTime,
+    note: row.note,
+    created_at: row.createdAt,
+  };
 }
 
 export async function recordAgentMessage(input: {
@@ -235,6 +422,8 @@ export async function setDemoAgentState(
 
 export async function resetDemoAgent(): Promise<void> {
   const db = await getDb();
+  await db.delete(agentApprovals);
+  await db.delete(simulatedCalendarEdits);
   await db.delete(agentToolCalls);
   await db.delete(agentMessages);
   await db.delete(simulatedOutbox);
@@ -270,6 +459,11 @@ export async function loadAgentCommandState() {
     .limit(1);
   return {
     permissions: await loadAgentPermissions(),
+    // The queue is intentionally global rather than scoped to the latest run:
+    // an action the owner has not answered yet still needs a decision after a
+    // newer run starts.
+    approvals: await pendingAgentApprovals(),
+    calendarEdits: await loadSimulatedCalendarEdits(),
     latestRun: latestRun
       ? {
           ...latestRun,

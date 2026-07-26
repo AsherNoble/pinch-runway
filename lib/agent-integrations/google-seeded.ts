@@ -1,3 +1,23 @@
+/**
+ * Simulated Google Workspace adapter — Gmail and Calendar.
+ *
+ * DELIBERATELY FAKE. Runway holds no Google credentials and requests no Google
+ * scopes; nothing in this file performs network I/O. Reads come from the
+ * hard-coded fixtures below and writes land in local D1 tables
+ * (`simulated_outbox`, `simulated_calendar_edits`). Every value returned from
+ * here is stamped `provenance: "simulated"` and carries a `warning` string, and
+ * callers surface both in the UI audit trail — the product's rule is that a
+ * simulated step must never read as a confirmed external one.
+ *
+ * The point of the simulation is that the agent's *permission* system is real
+ * even while its side effects are not: the runtime gates these tools by action
+ * class exactly as it would gate a live Google integration, so swapping in a
+ * real adapter later is a change of implementation, not of control flow.
+ *
+ * If you are wiring up real Google APIs: keep the function signatures and the
+ * ProviderEnvelope shape, and flip `provenance` to "live" only once a provider
+ * response confirms the operation.
+ */
 import type { ProviderEnvelope } from "./provenance";
 
 export interface SeededGmailHeader {
@@ -36,6 +56,24 @@ export interface SeededCalendarEvent {
   end: { dateTime: string; timeZone: "Australia/Sydney" };
   attendees: readonly { email: string; responseStatus: "accepted" }[];
   trust: "untrusted_external_content";
+}
+
+/**
+ * One recorded change to a seeded calendar event.
+ *
+ * Runway is not connected to Google Calendar and deliberately does not ask for
+ * calendar scopes. Writes therefore cannot go anywhere real, so an edit is
+ * stored (db/schema.ts `simulated_calendar_edits`) and replayed over the
+ * fixture on read. Only the fields the agent actually changed are set; the rest
+ * stay null and fall through to the fixture value.
+ */
+export interface SeededCalendarEdit {
+  event_id: string;
+  summary?: string | null;
+  start_date_time?: string | null;
+  end_date_time?: string | null;
+  note?: string | null;
+  created_at: string;
 }
 
 export interface SimulatedGmailOutboxMessage {
@@ -188,14 +226,67 @@ export function getSeededGmailThreads(): ProviderEnvelope<readonly SeededGmailTh
   };
 }
 
-export function getSeededCalendarEvents(): ProviderEnvelope<readonly SeededCalendarEvent[]> {
+export function getSeededCalendarEvents(
+  edits: readonly SeededCalendarEdit[] = [],
+): ProviderEnvelope<readonly SeededCalendarEvent[]> {
+  const applied = applySeededCalendarEdits(calendarEvents, edits);
   return {
     provider: "google_calendar",
     provenance: "simulated",
     retrieved_at: "2026-07-26T19:15:00+10:00",
-    data: calendarEvents,
-    warning: "Seeded Calendar fixture; no event was read from Google.",
+    data: applied,
+    warning: edits.length
+      ? `Seeded Calendar fixture with ${edits.length} simulated Runway edit(s) applied; no event was read from or written to Google.`
+      : "Seeded Calendar fixture; no event was read from Google.",
   };
+}
+
+/**
+ * True when the id names an event in the seeded fixture.
+ *
+ * The calendar-edit tool checks this before recording anything so the agent
+ * cannot invent event ids and have them silently persist as orphan edits.
+ */
+export function isSeededCalendarEventId(value: unknown): value is string {
+  return calendarEvents.some((event) => event.id === value);
+}
+
+export function getSeededCalendarEventIds(): readonly string[] {
+  return calendarEvents.map((event) => event.id);
+}
+
+/**
+ * Replays stored edits over the immutable fixture, oldest first, so the last
+ * edit to a field wins. Kept pure and exported for direct unit testing.
+ */
+export function applySeededCalendarEdits(
+  events: readonly SeededCalendarEvent[],
+  edits: readonly SeededCalendarEdit[],
+): readonly SeededCalendarEvent[] {
+  if (!edits.length) return events;
+  const ordered = [...edits].sort((left, right) =>
+    left.created_at.localeCompare(right.created_at),
+  );
+  return events.map((event) => {
+    const relevant = ordered.filter((edit) => edit.event_id === event.id);
+    if (!relevant.length) return event;
+    return relevant.reduce<SeededCalendarEvent>((current, edit) => {
+      const notes = edit.note?.trim();
+      return {
+        ...current,
+        summary: edit.summary?.trim() || current.summary,
+        description: notes
+          ? `${current.description}\n\nRunway note: ${notes}`
+          : current.description,
+        start: edit.start_date_time
+          ? { ...current.start, dateTime: edit.start_date_time }
+          : current.start,
+        end: edit.end_date_time
+          ? { ...current.end, dateTime: edit.end_date_time }
+          : current.end,
+      };
+    }, event);
+  });
 }
 
 export async function sendSimulatedGmailMessage(

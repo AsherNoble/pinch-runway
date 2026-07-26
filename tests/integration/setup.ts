@@ -17,5 +17,13 @@ process.env.BASIQ_WEBHOOK_SECRET = `whsec_${btoa("basiq_webhook_test_secret")}`;
 process.env.RUNWAY_AUTOMATION_MODE = "test";
 process.env.RUNWAY_TEST_RECIPIENT = "operator@example.test";
 
-// Apply the real schema once; isolatedStorage rolls back each test's writes.
+// Apply the real schema once.
+//
+// NOTE: writes are NOT rolled back between tests. `isolatedStorage` is set in
+// vitest.config.ts but is not a recognised option in the `cloudflareTest`
+// plugin schema of @cloudflare/vitest-pool-workers 0.18.8 — the schema strips
+// unknown keys, so the flag is inert and D1 rows persist for the whole file.
+// Most tests here are unaffected because they assert against the latest run.
+// A test that reads a table globally must clean up itself (see the
+// `resetDemoAgent()` beforeEach hooks in agent-runtime.test.ts).
 await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);

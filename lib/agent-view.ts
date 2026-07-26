@@ -126,6 +126,13 @@ export function buildAgentCommandCenterModel(input: {
       },
     ],
     permissions: permissionRows(input.commandState),
+    approvals: (input.commandState?.approvals ?? []).map((approval) => ({
+      id: approval.id,
+      actionClass: approval.actionClass,
+      label: permissionLabels[approval.actionClass] ?? approval.actionClass,
+      summary: approval.summary,
+      requestedAt: approval.createdAt,
+    })),
     presenter: {
       enabled: process.env.RUNWAY_ENABLE_DEMO_AGENT !== "0",
       scenarioLabel:
@@ -187,6 +194,13 @@ function buildActivity(
   return activity.reverse();
 }
 
+const permissionLabels: Record<string, string> = {
+  collection_email: "Client collection email",
+  payment_link: "Pinch payment link",
+  calendar_edit: "Calendar edits",
+  receipt_request: "Receipt requests",
+};
+
 function permissionRows(
   state: StoredCommandState | null,
 ): AgentCommandCenterViewModel["permissions"] {
@@ -199,26 +213,28 @@ function permissionRows(
   return [
     {
       actionClass: "collection_email",
-      label: "Client collection email",
+      label: permissionLabels.collection_email,
       description: "Write to a client from the connected business inbox.",
       mode: permissions.collection_email,
     },
     {
       actionClass: "payment_link",
-      label: "Pinch payment link",
+      label: permissionLabels.payment_link,
       description: "Create or reuse a provider-confirmed collection link.",
       mode: permissions.payment_link,
     },
     {
       actionClass: "calendar_edit",
-      label: "Calendar edits",
-      description: "Change business calendar events and admin blocks.",
+      label: permissionLabels.calendar_edit,
+      description:
+        "Reschedule or annotate business calendar events. Seeded calendar; no Google account is connected.",
       mode: permissions.calendar_edit,
     },
     {
       actionClass: "receipt_request",
-      label: "Receipt requests",
-      description: "Ask for evidence needed by the accountant.",
+      label: permissionLabels.receipt_request,
+      description:
+        "Email a supplier for evidence the accountant needs. Simulated outbox; no mail is delivered.",
       mode: permissions.receipt_request,
     },
   ];
@@ -251,6 +267,8 @@ function toolTitle(name: string): string {
       get_action_history: "Audit history checked",
       create_pinch_payment_link: "Pinch collection request handled",
       send_client_email: "Client follow-up prepared",
+      update_calendar_event: "Calendar event updated",
+      request_receipt: "Receipt evidence requested",
       send_owner_whatsapp: "WhatsApp receipt sent",
     }[name] ?? name.replaceAll("_", " ")
   );

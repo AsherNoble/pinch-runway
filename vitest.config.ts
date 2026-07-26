@@ -12,6 +12,7 @@ const migrations = [
   "0001_resend_email_delivery",
   "0002_basiq_runway",
   "0003_always_on_agent",
+  "0004_agent_approvals",
 ].map((name) => {
   const migrationSql = readFileSync(
     fileURLToPath(new URL(`./drizzle/${name}.sql`, import.meta.url)),

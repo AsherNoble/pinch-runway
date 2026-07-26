@@ -296,6 +296,74 @@ export const simulatedOutbox = sqliteTable(
   (table) => [index("simulated_outbox_run").on(table.runId, table.createdAt)],
 );
 
+/**
+ * The approval queue behind the "Ask me" permission mode.
+ *
+ * When a tool's action class is set to "ask", the runtime refuses to run the
+ * side effect and parks the proposed action here instead. The owner resolves it
+ * from the command centre, and only an explicit approval executes the tool.
+ * Without this table "Ask me" would be indistinguishable from "Blocked" —
+ * the run would simply stop with no way to say yes.
+ */
+export const agentApprovals = sqliteTable(
+  "agent_approvals",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
+    // One approval per audited tool call. The unique index makes a retried
+    // enqueue a no-op rather than a duplicate row in the owner's queue.
+    toolCallId: text("tool_call_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    actionClass: text("action_class", {
+      enum: [
+        "collection_email",
+        "payment_link",
+        "calendar_edit",
+        "receipt_request",
+      ],
+    }).notNull(),
+    inputJson: text("input_json").notNull(),
+    summary: text("summary").notNull(),
+    status: text("status", {
+      enum: ["pending", "executing", "executed", "denied", "failed"],
+    }).notNull(),
+    createdAt: text("created_at").notNull(),
+    decidedAt: text("decided_at"),
+    resultJson: text("result_json"),
+  },
+  (table) => [
+    uniqueIndex("agent_approvals_tool_call").on(table.toolCallId),
+    index("agent_approvals_status").on(table.status, table.createdAt),
+  ],
+);
+
+/**
+ * Mutations the agent has made to the seeded calendar fixture.
+ *
+ * Runway does not talk to Google Calendar. The calendar the agent reads is a
+ * hard-coded fixture (lib/agent-integrations/google-seeded.ts), so an edit has
+ * nowhere to land unless we record it. Each row is one edit, replayed as an
+ * overlay on the fixture at read time. That keeps the fixture immutable while
+ * making the `calendar_edit` permission observably real: what the agent changes
+ * under "Auto" is what it reads back later.
+ */
+export const simulatedCalendarEdits = sqliteTable(
+  "simulated_calendar_edits",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
+    eventId: text("event_id").notNull(),
+    summary: text("summary"),
+    startDateTime: text("start_date_time"),
+    endDateTime: text("end_date_time"),
+    note: text("note"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    index("simulated_calendar_edits_event").on(table.eventId, table.createdAt),
+  ],
+);
+
 export const demoAgentState = sqliteTable("demo_agent_state", {
   id: integer("id").primaryKey(),
   scenarioState: text("scenario_state", {
