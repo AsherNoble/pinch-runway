@@ -1,6 +1,8 @@
-import { RunwayDashboard } from "@/components/runway-dashboard";
+import { AgentCommandCenter } from "@/components/agent-command-center";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import type { RunwaySnapshot } from "@/lib/runway-contracts";
+import { loadAgentCommandState } from "@/lib/agent-store";
+import { buildAgentCommandCenterModel } from "@/lib/agent-view";
 import {
   ensureRunwayProfile,
   loadRunwaySnapshot,
@@ -43,16 +45,15 @@ function unavailableSnapshot(message: string): RunwaySnapshot {
   };
 }
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+export default async function Home() {
   const user = await getChatGPTUser();
   let snapshot: RunwaySnapshot;
+  let commandState: Awaited<ReturnType<typeof loadAgentCommandState>> | null =
+    null;
   try {
     if (user) await ensureRunwayProfile(user.email);
     snapshot = await loadRunwaySnapshot();
+    commandState = await loadAgentCommandState();
   } catch (error) {
     snapshot = unavailableSnapshot(
       error instanceof Error
@@ -60,13 +61,14 @@ export default async function Home({
         : "Runway data could not be loaded.",
     );
   }
-  const query = await searchParams;
-  const jobIds = typeof query.jobIds === "string" ? query.jobIds : undefined;
   return (
-    <RunwayDashboard
-      snapshot={snapshot}
-      jobIds={jobIds}
-      signedInEmail={user?.email}
+    <AgentCommandCenter
+      model={buildAgentCommandCenterModel({ snapshot, commandState })}
+      endpoints={{
+        permission: "/api/agent/permissions",
+        trigger: "/api/internal/demo/agent/trigger",
+        reset: "/api/internal/demo/agent/reset",
+      }}
     />
   );
 }
