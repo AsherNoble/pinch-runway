@@ -1,11 +1,41 @@
 import type { RunwaySnapshot } from "@/lib/runway-contracts";
+import type { RunwayViewModel } from "@/lib/runway-view";
 import { BankControls } from "./bank-controls";
 import { ExpenseExclusions } from "./expense-exclusions";
+import { PaymentLinkAction } from "./payment-link-action";
 
 interface RunwayDashboardProps {
   snapshot: RunwaySnapshot;
   jobIds?: string;
   signedInEmail?: string | null;
+  collectionPing?: RunwayViewModel;
+}
+
+function CollectionPingCard({ view }: { view: RunwayViewModel }) {
+  const ping = view.pings[0];
+  const cta = ping.cta;
+  return (
+    <section className="dashboard-card collection-ping-card" aria-labelledby="collection-ping-title">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Live Pinch collection</p>
+          <h2 id="collection-ping-title">This week’s call</h2>
+        </div>
+        <span className="demo-pill">
+          {view.snapshot.data_source.is_live ? "Live sandbox" : "Fixture"}
+        </span>
+      </div>
+      <p>{ping.text}</p>
+      <p className="pending-note">{ping.consequence}</p>
+      {cta.label === "Create Pinch payment link" ? (
+        <PaymentLinkAction invoiceId={cta.action.target_invoice_id} />
+      ) : (
+        <div className="ping-actions ping-actions-status">
+          <span className="ping-status-label">{cta.label}</span>
+        </div>
+      )}
+    </section>
+  );
 }
 
 function aud(cents: number, precise = false) {
@@ -128,6 +158,7 @@ export function RunwayDashboard({
   snapshot,
   jobIds,
   signedInEmail,
+  collectionPing,
 }: RunwayDashboardProps) {
   const expectedClosing =
     snapshot.forecast?.expected_with_receivables.closing_position_cents ?? null;
@@ -195,6 +226,8 @@ export function RunwayDashboard({
           Automation {snapshot.automation_mode}
         </span>
       </section>
+
+      {collectionPing ? <CollectionPingCard view={collectionPing} /> : null}
 
       <section className="dashboard-card forecast-section">
         <div className="section-heading">
