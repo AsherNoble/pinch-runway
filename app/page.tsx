@@ -66,6 +66,7 @@ export default async function Home() {
       model={buildAgentCommandCenterModel({ snapshot, commandState })}
       endpoints={{
         permission: "/api/agent/permissions",
+        heartbeat: "/api/agent/heartbeat",
         trigger: "/api/internal/demo/agent/trigger",
         reset: "/api/internal/demo/agent/reset",
       }}

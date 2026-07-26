@@ -223,7 +223,7 @@ export const agentRuns = sqliteTable(
   {
     id: text("id").primaryKey(),
     triggerType: text("trigger_type", {
-      enum: ["demo_event", "whatsapp", "manual"],
+      enum: ["demo_event", "whatsapp", "manual", "heartbeat"],
     }).notNull(),
     status: text("status", {
       enum: ["running", "awaiting_approval", "completed", "failed"],
@@ -238,6 +238,27 @@ export const agentRuns = sqliteTable(
     errorCode: text("error_code"),
   },
   (table) => [index("agent_runs_started").on(table.startedAt)],
+);
+
+export const agentHeartbeatSettings = sqliteTable("agent_heartbeat_settings", {
+  id: integer("id").primaryKey(),
+  enabled: integer("enabled", { mode: "boolean" }).notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const agentHeartbeatExecutions = sqliteTable(
+  "agent_heartbeat_executions",
+  {
+    scheduledHour: text("scheduled_hour").primaryKey(),
+    startedAt: text("started_at").notNull(),
+    completedAt: text("completed_at"),
+    status: text("status", {
+      enum: ["running", "completed", "failed", "skipped"],
+    }).notNull(),
+    runId: text("run_id"),
+    errorCode: text("error_code"),
+  },
+  (table) => [index("agent_heartbeat_executions_started").on(table.startedAt)],
 );
 
 export const agentToolCalls = sqliteTable(

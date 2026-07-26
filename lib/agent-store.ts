@@ -2,6 +2,8 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   agentMessages,
+  agentHeartbeatExecutions,
+  agentHeartbeatSettings,
   agentPermissions,
   agentRuns,
   agentToolCalls,
@@ -21,6 +23,13 @@ import type {
 export type StoredPermissionMode = PermissionMode;
 export type StoredActionClass = ActionClass;
 export type StoredProvenance = Provenance;
+export type AgentHeartbeatExecutionStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "skipped";
+
+const AGENT_HEARTBEAT_SETTINGS_ID = 1;
 
 export async function loadAgentPermissions(): Promise<
   Record<StoredActionClass, StoredPermissionMode>
@@ -53,7 +62,7 @@ export async function setAgentPermission(
 
 export async function beginAgentRun(input: {
   id: string;
-  triggerType: "demo_event" | "whatsapp" | "manual";
+  triggerType: "demo_event" | "whatsapp" | "manual" | "heartbeat";
   provenance: StoredProvenance;
 }): Promise<void> {
   await (await getDb()).insert(agentRuns).values({
@@ -63,6 +72,75 @@ export async function beginAgentRun(input: {
     provenance: input.provenance,
     startedAt: new Date().toISOString(),
   });
+}
+
+export async function loadAgentHeartbeatSettings() {
+  const db = await getDb();
+  const [settings] = await db
+    .select()
+    .from(agentHeartbeatSettings)
+    .where(eq(agentHeartbeatSettings.id, AGENT_HEARTBEAT_SETTINGS_ID))
+    .limit(1);
+  const [latestExecution] = await db
+    .select()
+    .from(agentHeartbeatExecutions)
+    .orderBy(desc(agentHeartbeatExecutions.startedAt))
+    .limit(1);
+
+  return {
+    enabled: settings?.enabled ?? true,
+    updatedAt: settings?.updatedAt ?? null,
+    latestExecution: latestExecution ?? null,
+  };
+}
+
+export async function setAgentHeartbeatEnabled(enabled: boolean): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(agentHeartbeatSettings)
+    .values({
+      id: AGENT_HEARTBEAT_SETTINGS_ID,
+      enabled,
+      updatedAt: new Date().toISOString(),
+    })
+    .onConflictDoUpdate({
+      target: agentHeartbeatSettings.id,
+      set: { enabled, updatedAt: new Date().toISOString() },
+    });
+}
+
+export async function reserveAgentHeartbeatExecution(input: {
+  scheduledHour: string;
+  startedAt: string;
+}): Promise<boolean> {
+  const db = await getDb();
+  const inserted = await db
+    .insert(agentHeartbeatExecutions)
+    .values({
+      scheduledHour: input.scheduledHour,
+      startedAt: input.startedAt,
+      status: "running",
+    })
+    .onConflictDoNothing()
+    .returning({ scheduledHour: agentHeartbeatExecutions.scheduledHour });
+  return inserted.length === 1;
+}
+
+export async function completeAgentHeartbeatExecution(input: {
+  scheduledHour: string;
+  status: Exclude<AgentHeartbeatExecutionStatus, "running">;
+  runId?: string;
+  errorCode?: string;
+}): Promise<void> {
+  await (await getDb())
+    .update(agentHeartbeatExecutions)
+    .set({
+      status: input.status,
+      completedAt: new Date().toISOString(),
+      runId: input.runId ?? null,
+      errorCode: input.errorCode ?? null,
+    })
+    .where(eq(agentHeartbeatExecutions.scheduledHour, input.scheduledHour));
 }
 
 export async function completeAgentRun(input: {
@@ -268,6 +346,7 @@ export async function loadAgentCommandState() {
     .from(demoAgentState)
     .where(eq(demoAgentState.id, 1))
     .limit(1);
+  const heartbeat = await loadAgentHeartbeatSettings();
   return {
     permissions: await loadAgentPermissions(),
     latestRun: latestRun
@@ -285,6 +364,7 @@ export async function loadAgentCommandState() {
     })),
     messages: await recentAgentMessages(),
     outbox,
+    heartbeat,
     demoState: demoState ?? {
       id: 1,
       scenarioState: "ready" as const,

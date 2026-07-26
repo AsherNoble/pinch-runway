@@ -126,6 +126,12 @@ export function buildAgentCommandCenterModel(input: {
       },
     ],
     permissions: permissionRows(input.commandState),
+    heartbeat: {
+      enabled: input.commandState?.heartbeat.enabled ?? true,
+      lastCheckedAt:
+        input.commandState?.heartbeat.latestExecution?.completedAt ?? null,
+      lastStatus: input.commandState?.heartbeat.latestExecution?.status ?? null,
+    },
     presenter: {
       enabled: process.env.RUNWAY_ENABLE_DEMO_AGENT !== "0",
       scenarioLabel:
@@ -151,6 +157,8 @@ function buildActivity(
       title:
         run.triggerType === "demo_event"
           ? "Unexpected supplier bill detected"
+          : run.triggerType === "heartbeat"
+            ? "Hourly heartbeat checked"
           : "Owner asked Runway",
       detail:
         run.summary ??

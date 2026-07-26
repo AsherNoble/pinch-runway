@@ -58,6 +58,11 @@ export interface AgentCommandCenterViewModel {
     description: string;
     mode: AgentPermissionMode;
   }[];
+  heartbeat?: {
+    enabled: boolean;
+    lastCheckedAt: string | null;
+    lastStatus: "running" | "completed" | "failed" | "skipped" | null;
+  };
   presenter?: {
     enabled: boolean;
     scenarioLabel: string;
@@ -68,6 +73,7 @@ export interface AgentCommandCenterViewModel {
 
 export interface AgentCommandCenterEndpoints {
   permission?: string;
+  heartbeat?: string;
   trigger?: string;
   reset?: string;
 }
@@ -227,6 +233,10 @@ export function AgentCommandCenter({
     ) as Record<string, AgentPermissionMode>,
   );
   const [busyPermission, setBusyPermission] = useState<string | null>(null);
+  const [heartbeatEnabled, setHeartbeatEnabled] = useState(
+    model.heartbeat?.enabled ?? false,
+  );
+  const [heartbeatBusy, setHeartbeatBusy] = useState(false);
   const [presenterBusy, setPresenterBusy] = useState<"trigger" | "reset" | null>(
     null,
   );
@@ -298,6 +308,41 @@ export function AgentCommandCenter({
       );
     } finally {
       setPresenterBusy(null);
+    }
+  }
+
+  async function toggleHeartbeat() {
+    if (!endpoints.heartbeat) return;
+    const enabled = !heartbeatEnabled;
+    setHeartbeatBusy(true);
+    setMessage("");
+    try {
+      const response = await fetch(endpoints.heartbeat, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        enabled?: boolean;
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(body.error ?? "Runway could not update the heartbeat.");
+      }
+      setHeartbeatEnabled(body.enabled ?? enabled);
+      setMessage(
+        (body.enabled ?? enabled)
+          ? "Hourly heartbeat enabled. Runway will check mock finance, inbox and calendar context on the next hourly run."
+          : "Hourly heartbeat paused. Existing history remains available.",
+      );
+    } catch (error) {
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Runway could not update the heartbeat.",
+      );
+    } finally {
+      setHeartbeatBusy(false);
     }
   }
 
@@ -490,6 +535,52 @@ export function AgentCommandCenter({
           ))}
         </div>
       </section>
+
+      {model.heartbeat ? (
+        <section className="agent-panel agent-heartbeat-panel">
+          <div className="agent-card-heading">
+            <div>
+              <p className="eyebrow">Hourly heartbeat</p>
+              <h2>Mock-context monitoring</h2>
+            </div>
+            <span
+              className={`agent-action-state agent-state-${
+                heartbeatEnabled ? "completed" : "paused"
+              }`}
+            >
+              {heartbeatEnabled ? "on" : "paused"}
+            </span>
+          </div>
+          <p>
+            Every hourly pass reads the mock inbox, mock calendar, financial
+            snapshot and recent Runway history. It only records a summary; it
+            does not send messages or take collection actions.
+          </p>
+          <div className="agent-heartbeat-actions">
+            <small>
+              {model.heartbeat.lastCheckedAt
+                ? `Last check ${dateLabel(model.heartbeat.lastCheckedAt, true)}${
+                    model.heartbeat.lastStatus
+                      ? ` · ${model.heartbeat.lastStatus}`
+                      : ""
+                  }`
+                : "No hourly check recorded yet."}
+            </small>
+            <button
+              aria-pressed={heartbeatEnabled}
+              disabled={!endpoints.heartbeat || heartbeatBusy}
+              onClick={() => void toggleHeartbeat()}
+              type="button"
+            >
+              {heartbeatBusy
+                ? "Saving…"
+                : heartbeatEnabled
+                  ? "Pause hourly heartbeat"
+                  : "Enable hourly heartbeat"}
+            </button>
+          </div>
+        </section>
+      ) : null}
 
       {model.presenter?.enabled ? (
         <details className="agent-presenter-panel">

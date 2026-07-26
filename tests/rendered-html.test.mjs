@@ -38,6 +38,8 @@ test("server-renders the always-on financial operations command center", async (
   assert.match(html, /Agent activity/);
   assert.match(html, /Connected context/);
   assert.match(html, /You decide how much Runway can do/);
+  assert.match(html, /Mock-context monitoring/);
+  assert.match(html, /Enable hourly heartbeat|Pause hourly heartbeat/);
   assert.match(html, /Pinch payment link/);
   assert.match(html, /Inject large bill/);
   assert.match(html, /does not move money/i);
