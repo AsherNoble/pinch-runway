@@ -24,3 +24,11 @@ export const pinchWebhookEvents = sqliteTable("pinch_webhook_events", {
   paymentId: text("payment_id"),
   status: text("status"),
 });
+
+/** Owner-declared tax settings; absence means "not configured", not a zero rate. */
+export const taxProfiles = sqliteTable("tax_profiles", {
+  ownerEmail: text("owner_email").primaryKey(),
+  gstRegistered: integer("gst_registered", { mode: "boolean" }).notNull(),
+  incomeTaxRateBp: integer("income_tax_rate_bp").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});

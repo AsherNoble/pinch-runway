@@ -244,3 +244,48 @@ export interface DemoScenario extends Omit<RunwayDataSnapshot, "data_source"> {
   data_source: DemoFixtureSource;
   expected_forecast: ForecastResult;
 }
+
+/**
+ * Owner-declared tax settings, not inferred from Pinch or lodged with the
+ * ATO. Runway has no visibility into real brackets or other income, so the
+ * rate is a stated planning approximation rather than a return.
+ */
+export interface TaxProfile {
+  gst_registered: boolean;
+  /** Basis points, e.g. 3250 = 32.5%. */
+  income_tax_rate_bp: number;
+}
+
+export interface TaxSetAsidePeriod {
+  start: IsoDate;
+  end: IsoDate;
+}
+
+/**
+ * A planning estimate of income already received that is earmarked for
+ * income tax and net GST. Never a lodged BAS or tax return figure.
+ */
+export interface TaxSetAsideResult {
+  period: TaxSetAsidePeriod;
+  /** Integer cents; payments received within the period. */
+  income_received: Cents;
+  /** Integer cents; 0 when not GST-registered. */
+  gst_collected: Cents;
+  /** Integer cents; GST already paid on deductible expenses in the period. */
+  gst_credits: Cents;
+  /** Integer cents; max(0, gst_collected - gst_credits). */
+  net_gst_payable: Cents;
+  /** Integer cents; income_tax_rate_bp applied to GST-exclusive income. */
+  income_tax_set_aside: Cents;
+  /** Integer cents; income_tax_set_aside + net_gst_payable. */
+  total_set_aside: Cents;
+}
+
+/**
+ * The API-facing result. Absence of a declared TaxProfile must read as "not
+ * configured", never as a silent $0 estimate — the same reasoning that keeps
+ * PinchDataSource from letting an unavailable read masquerade as real data.
+ */
+export type TaxSetAsideStatus =
+  | { configured: false }
+  | ({ configured: true; data_source: PinchDataSource } & TaxSetAsideResult);
