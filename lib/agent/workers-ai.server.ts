@@ -10,8 +10,31 @@ import { ModelResponseError } from "./model.ts";
 
 export const WORKERS_AI_MODEL = "@cf/zai-org/glm-4.7-flash" as const;
 
-interface WorkersAiRunInput {
-  messages: readonly Record<string, unknown>[];
+export type WorkersAiMessage =
+  | {
+      role: "system" | "user";
+      content: string;
+    }
+  | {
+      role: "assistant";
+      content: string | null;
+      tool_calls?: readonly {
+        id: string;
+        type: "function";
+        function: {
+          name: string;
+          arguments: string;
+        };
+      }[];
+    }
+  | {
+      role: "tool";
+      content: string;
+      tool_call_id: string;
+    };
+
+export interface WorkersAiRunInput {
+  messages: readonly WorkersAiMessage[];
   tools: readonly {
     type: "function";
     function: {
@@ -33,9 +56,18 @@ export interface WorkersAiBinding {
 }
 
 export class WorkersAiBindingError extends Error {
-  constructor(message = "Cloudflare Workers AI binding `AI` is unavailable") {
+  constructor(
+    message = "Cloudflare Workers AI binding and configured gateway are unavailable",
+  ) {
     super(message);
     this.name = "WorkersAiBindingError";
+  }
+}
+
+export class WorkersAiGatewayError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "WorkersAiGatewayError";
   }
 }
 
@@ -48,6 +80,102 @@ export class WorkersAiInferenceError extends Error {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+const MAX_GATEWAY_RESPONSE_BYTES = 256 * 1_024;
+const GATEWAY_TIMEOUT_MS = 30_000;
+
+async function readBoundedGatewayResponse(response: Response): Promise<unknown> {
+  const declaredLength = Number(response.headers.get("content-length"));
+  if (
+    Number.isFinite(declaredLength) &&
+    declaredLength > MAX_GATEWAY_RESPONSE_BYTES
+  ) {
+    throw new WorkersAiGatewayError("Workers AI gateway response was too large");
+  }
+  if (!response.body) {
+    throw new WorkersAiGatewayError("Workers AI gateway returned no response");
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_GATEWAY_RESPONSE_BYTES) {
+      await reader.cancel();
+      throw new WorkersAiGatewayError(
+        "Workers AI gateway response was too large",
+      );
+    }
+    chunks.push(value);
+  }
+
+  const body = new Uint8Array(totalBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  try {
+    return JSON.parse(new TextDecoder().decode(body));
+  } catch {
+    throw new WorkersAiGatewayError(
+      "Workers AI gateway returned invalid JSON",
+    );
+  }
+}
+
+export function createWorkersAiGatewayBinding(input: {
+  url: string;
+  token: string;
+  fetcher?: typeof fetch;
+}): WorkersAiBinding {
+  let url: URL;
+  try {
+    url = new URL(input.url);
+  } catch {
+    throw new WorkersAiBindingError("Workers AI gateway URL is invalid");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.hash ||
+    url.search
+  ) {
+    throw new WorkersAiBindingError(
+      "Workers AI gateway URL must be a plain HTTPS endpoint",
+    );
+  }
+  const token = input.token.trim();
+  if (token.length < 32) {
+    throw new WorkersAiBindingError("Workers AI gateway token is invalid");
+  }
+  const fetcher = input.fetcher ?? fetch;
+
+  return {
+    async run(model, runInput) {
+      const response = await fetcher(url, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          accept: "application/json",
+        },
+        body: JSON.stringify({ model, input: runInput }),
+        signal: AbortSignal.timeout(GATEWAY_TIMEOUT_MS),
+      });
+      if (!response.ok) {
+        throw new WorkersAiGatewayError(
+          `Workers AI gateway request failed with status ${response.status}`,
+        );
+      }
+      return readBoundedGatewayResponse(response);
+    },
+  };
 }
 
 function parseToolCall(value: unknown): ModelToolCall {
@@ -128,7 +256,7 @@ function parseCompletion(value: unknown): ModelCompletion {
   };
 }
 
-function openAiMessage(message: ModelMessage): Record<string, unknown> {
+function openAiMessage(message: ModelMessage): WorkersAiMessage {
   if (message.role === "assistant") {
     return {
       role: message.role,
@@ -196,8 +324,17 @@ export function createWorkersAiModel(ai: WorkersAiBinding): AgentModel {
 
 export async function getWorkersAiBinding(): Promise<WorkersAiBinding> {
   const { env } = await import("cloudflare:workers");
-  if (!env.AI || typeof env.AI.run !== "function") {
-    throw new WorkersAiBindingError();
+  if (env.AI && typeof env.AI.run === "function") {
+    return env.AI;
   }
-  return env.AI;
+
+  const gatewayUrl = process.env.WORKERS_AI_GATEWAY_URL?.trim();
+  const gatewayToken = process.env.WORKERS_AI_GATEWAY_TOKEN?.trim();
+  if (gatewayUrl && gatewayToken) {
+    return createWorkersAiGatewayBinding({
+      url: gatewayUrl,
+      token: gatewayToken,
+    });
+  }
+  throw new WorkersAiBindingError();
 }
