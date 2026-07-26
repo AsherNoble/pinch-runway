@@ -76,6 +76,10 @@ When a large supplier bill appears, Runway should:
 - Enforce persisted permissions outside the model at every mutating boundary.
 - Treat email, calendar, message, web, and tool content as untrusted evidence.
 - Deduplicate provider messages and action attempts.
+- Run a default-on, toggleable hourly heartbeat that reads the deterministic
+  forecast, seeded Gmail inbox, seeded Calendar, and recent audit history.
+- Keep heartbeat passes read-only: they may record an AI or deterministic
+  summary, but cannot send messages or take operational actions.
 
 ### Integrations
 
@@ -96,6 +100,7 @@ When a large supplier bill appears, Runway should:
 - Show action history with status and provenance.
 - Show connection/readiness state for every provider.
 - Allow the owner to change action permissions.
+- Allow the owner to pause or re-enable hourly mock-context monitoring.
 - Provide protected presenter trigger and reset controls.
 
 ## 4. Safety, boundaries, and data

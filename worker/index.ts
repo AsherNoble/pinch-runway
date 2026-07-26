@@ -1,6 +1,7 @@
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
+import { runHourlyHeartbeat } from "../lib/agent-heartbeat";
 import { runScheduledAutomation } from "../lib/automation";
 
 interface Env {
@@ -44,11 +45,13 @@ const worker = {
     return handler.fetch(request, env, ctx);
   },
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     _env: Env,
     ctx: ExecutionContext,
   ): Promise<void> {
-    ctx.waitUntil(runScheduledAutomation());
+    const scheduledAt = new Date(controller.scheduledTime);
+    ctx.waitUntil(runHourlyHeartbeat(scheduledAt));
+    ctx.waitUntil(runScheduledAutomation(scheduledAt));
   },
 };
 

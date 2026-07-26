@@ -67,6 +67,7 @@ export default async function Home() {
       endpoints={{
         permission: "/api/agent/permissions",
         approval: "/api/agent/approvals",
+        heartbeat: "/api/agent/heartbeat",
         trigger: "/api/internal/demo/agent/trigger",
         reset: "/api/internal/demo/agent/reset",
       }}

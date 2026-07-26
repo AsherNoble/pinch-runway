@@ -113,6 +113,7 @@ Runway stores:
 - the explicitly demo receivables ledger;
 - reminder decisions, provider delivery IDs, and scheduler execution locks;
 - Basiq webhook IDs for replay protection.
+- hourly agent-heartbeat settings and idempotent heartbeat execution records.
 
 Runway does not store full account numbers, Basiq access tokens, or raw
 transaction history. A consent revocation/expiry or connection-deletion webhook
@@ -142,6 +143,18 @@ requires the separate `RUNWAY_ENABLE_LIVE_DELIVERY=1` safety lock, which should
 remain disabled until a later privacy/compliance review. The legacy reminder
 scheduler never creates a Pinch payment link. The new agent can do so only
 through its separately audited `payment_link` permission.
+
+## Hourly agent heartbeat
+
+The same hourly Cloudflare schedule runs a separate, read-only agent heartbeat.
+It checks the deterministic financial snapshot, mock Gmail inbox, mock Google
+Calendar, and recent Runway audit history, then records a concise Workers AI
+summary (or grounded fallback) in D1. The heartbeat never sends WhatsApp,
+emails, payment links, or other actions.
+
+It is enabled by default and can be paused or re-enabled from the command
+centre. A D1 hour lock prevents duplicate cron deliveries from creating a
+second monitoring pass.
 
 ## Configuration
 

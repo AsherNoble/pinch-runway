@@ -1554,6 +1554,50 @@ h3 {
   opacity: 0.48;
 }
 
+.agent-heartbeat-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 20px;
+  padding: 20px;
+}
+
+.agent-heartbeat-panel > p {
+  max-width: 680px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.agent-heartbeat-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.agent-heartbeat-actions small {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.agent-heartbeat-actions button {
+  cursor: pointer;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 10px;
+  padding: 10px 13px;
+  color: #f8f6ed;
+  background: var(--forest);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.agent-heartbeat-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
 .agent-control-message {
   position: sticky;
   bottom: 14px;
