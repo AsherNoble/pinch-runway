@@ -84,8 +84,10 @@ When a large supplier bill appears, Runway should:
 - **Gmail:** Seeded inbox evidence and simulated outbox for the MVP.
 - **Google Calendar:** Seeded project and commitment evidence for the MVP.
 - **WhatsApp:** Twilio Sandbox inbound webhook and outbound owner messages when available without unacceptable cost.
-- **Workers AI:** Live Cloudflare AI binding with no provider API key; visibly
-  audited deterministic fallback on binding, quota, response, or loop failure.
+- **Workers AI:** Live Cloudflare AI binding through a narrowly authenticated
+  gateway when the site host cannot expose `env.AI`; no provider API key.
+  Binding, gateway, quota, response, and loop failures use a visibly audited
+  deterministic fallback.
 
 ### Command centre
 

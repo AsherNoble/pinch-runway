@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "incremental": false,
+    "lib": ["ES2022", "WebWorker"],
+    "types": ["@cloudflare/workers-types", "node"]
+  },
+  "include": [
+    "./index.ts",
+    "./worker-configuration.d.ts",
+    "../../lib/agent/contracts.ts",
+    "../../lib/agent/model.ts",
+    "../../lib/agent/workers-ai.server.ts"
+  ]
+}
