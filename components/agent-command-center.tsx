@@ -9,7 +9,7 @@ export type AgentSourceName =
   | "Pinch"
   | "Gmail"
   | "Calendar"
-  | "Claude"
+  | "Workers AI"
   | "WhatsApp";
 
 export interface AgentCommandCenterViewModel {

@@ -2,7 +2,7 @@
 
 Runway is an always-on financial operations agent for one Australian sole
 trader. It combines a deterministic 13-week cash forecast with a constrained
-Claude tool loop, a WhatsApp channel, and a web command centre. The agent can
+Workers AI tool loop, a WhatsApp channel, and a web command centre. The agent can
 monitor business evidence, explain emerging cash pressure, and complete only
 the administrative actions the owner has authorised.
 
@@ -35,8 +35,10 @@ transactions and account numbers are not persisted.
 
 The command centre shows 13 weekly `cash_only` and
 `expected_with_receivables` paths. The model never calculates balances itself:
-deterministic code produces the forecast and ranked repair target, while Claude
-chooses among bounded tools and explains the evidence.
+deterministic code produces the forecast and ranked repair target, while
+Cloudflare Workers AI runs `@cf/zai-org/glm-4.7-flash` to choose among bounded
+tools and explain the evidence. Inference uses the `AI` binding and requires no
+model API key or additional SDK.
 
 ## Always-on agent demo
 
@@ -69,12 +71,12 @@ against the exact public webhook URL before reading a message.
 
 1. Join the sandbox from the owner’s WhatsApp number.
 2. Set the Twilio values shown in `.env.example`.
-3. Start Runway locally and expose it with Tailscale Funnel (or another HTTPS
-   tunnel).
-4. Set `TWILIO_WEBHOOK_PUBLIC_URL` to the exact public
-   `https://.../api/whatsapp` URL and configure that URL as the sandbox’s
-   incoming-message webhook.
-5. Send the sandbox number a WhatsApp message such as “What changed?”
+3. Set `TWILIO_WEBHOOK_PUBLIC_URL` to
+   `https://pinch-runway.asherthenoble.chatgpt.site/api/whatsapp`.
+4. Configure that exact URL as the sandbox’s incoming-message webhook using
+   `POST`.
+5. Send the sandbox number a WhatsApp message such as “What changed?”. The
+   deployed Worker handles inference and delivery without a laptop or tunnel.
 
 Leave the variables unset if the trial/sandbox available to the team would
 incur a charge; the rest of the demo remains functional and visibly reports the
@@ -155,14 +157,12 @@ RUNWAY_TEST_RECIPIENT=
 RUNWAY_ENABLE_LIVE_DELIVERY=0
 
 RUNWAY_ENABLE_DEMO_AGENT=1
-ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-5
 
 TWILIO_ACCOUNT_SID=
 TWILIO_AUTH_TOKEN=
 TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
 RUNWAY_OWNER_WHATSAPP=
-TWILIO_WEBHOOK_PUBLIC_URL=
+TWILIO_WEBHOOK_PUBLIC_URL=https://pinch-runway.asherthenoble.chatgpt.site/api/whatsapp
 
 RUNWAY_PAYMENT_RETURN_URL=http://localhost:3000/
 
@@ -194,7 +194,8 @@ npx wrangler dev --test-scheduled
 ```
 
 The full integration suite uses a real local D1 binding through Cloudflare’s
-Vitest pool. It does not call Basiq or Resend over the network.
+Vitest pool and injects a fake Workers AI binding. It does not call Workers AI,
+Basiq, or Resend over the network.
 
 ## Scope
 

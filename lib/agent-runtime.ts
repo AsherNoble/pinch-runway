@@ -12,8 +12,13 @@ import {
   type AgentToolResult,
   type AgentTranscriptMessage,
   type Provenance,
+  runAgentModelTurn,
 } from "@/lib/agent";
-import { runAnthropicAgentTurn } from "@/lib/agent/anthropic.server";
+import {
+  createWorkersAiModel,
+  getWorkersAiBinding,
+  type WorkersAiBinding,
+} from "@/lib/agent/workers-ai.server";
 import {
   SEEDED_BUSINESS_PROFILE,
   getSeededCalendarEvents,
@@ -45,7 +50,6 @@ const DEMO_OPENING_CASH_CENTS = 2_640_000;
 const DEMO_DAILY_SPEND_CENTS = 20_000;
 const DEMO_RISK_BUFFER_CENTS = 700_000;
 const DEMO_INVOICE_ID = SEEDED_BUSINESS_PROFILE.overdue_invoice_id;
-const DEFAULT_ANTHROPIC_MODEL = "claude-sonnet-5";
 const WHATSAPP_AGENT_SYSTEM_PROMPT = `${RUNWAY_AGENT_SYSTEM_PROMPT}
 
 You are replying to the owner in WhatsApp. Keep the final answer under 900 characters, lead with the answer, and use short paragraphs rather than tables. Use the financial snapshot or action-history tools whenever the answer depends on current business state. Do not call the owner-notification tool; the channel controller delivers your final response.`;
@@ -143,8 +147,13 @@ interface RunContext {
   deferOwnerNotification: boolean;
 }
 
+export interface AgentRuntimeOptions {
+  ai?: WorkersAiBinding;
+}
+
 export async function runProactiveDemoAgent(
   now = new Date(),
+  options: AgentRuntimeOptions = {},
 ): Promise<{ run_id: string; message: string; provenance: StoredProvenance }> {
   const runId = crypto.randomUUID();
   await beginAgentRun({
@@ -170,32 +179,37 @@ export async function runProactiveDemoAgent(
   };
 
   try {
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
-    const message = apiKey
-      ? (
-          await runAnthropicAgentTurn(
-            {
-              message:
-                "A finance-relevant Gmail event just confirmed the unexpected Frame & Light bill. " +
-                "Check the financial snapshot and business context. If there is material cash risk, " +
-                "use the ranked collection target. Collections and payment links are configured for auto approval. " +
-                "Create or reuse its Pinch link, send a friendly simulated Gmail reminder, then notify the owner on WhatsApp. " +
-                "Do not ask exploratory questions.",
-              transcript: [],
-            },
-            {
-              apiKey,
-              model:
-                process.env.ANTHROPIC_MODEL?.trim() ??
-                DEFAULT_ANTHROPIC_MODEL,
-              tools: RUNWAY_AGENT_TOOLS,
-              executeTool: (request) => executeRuntimeTool(request, context, now),
-              maxIterations: 6,
-              maxTokens: 1_200,
-            },
-          )
-        ).text
-      : await runDeterministicDemoFallback(context, now);
+    let provenance: StoredProvenance = "fallback";
+    let modelErrorCode: string | undefined;
+    let message: string;
+    try {
+      message = (
+        await runAgentModelTurn(
+          {
+            message:
+              "A finance-relevant Gmail event just confirmed the unexpected Frame & Light bill. " +
+              "Check the financial snapshot and business context. If there is material cash risk, " +
+              "use the ranked collection target. Collections and payment links are configured for auto approval. " +
+              "Create or reuse its Pinch link, send a friendly simulated Gmail reminder, then notify the owner on WhatsApp. " +
+              "Do not ask exploratory questions.",
+            transcript: [],
+          },
+          {
+            model: createWorkersAiModel(
+              options.ai ?? (await getWorkersAiBinding()),
+            ),
+            tools: RUNWAY_AGENT_TOOLS,
+            executeTool: (request) => executeRuntimeTool(request, context, now),
+            maxIterations: 6,
+            maxTokens: 1_200,
+          },
+        )
+      ).text;
+      provenance = "live";
+    } catch (error) {
+      modelErrorCode = error instanceof Error ? error.name : "unknown";
+      message = await runDeterministicDemoFallback(context, now);
+    }
 
     const finalMessage =
       message ||
@@ -204,13 +218,13 @@ export async function runProactiveDemoAgent(
       await notifyOwner(finalMessage, context);
     }
     const financial = context.financial ?? (await loadRuntimeFinancialContext(now));
-    const provenance: StoredProvenance = apiKey ? "simulated" : "fallback";
     await completeAgentRun({
       id: runId,
       status: "completed",
       provenance,
       summary: finalMessage,
       forecast: financial.forecast,
+      errorCode: modelErrorCode,
     });
     await setDemoAgentState("completed", runId);
     return { run_id: runId, message: finalMessage, provenance };
@@ -232,7 +246,11 @@ export async function runWhatsAppAgentTurn(input: {
   body: string;
   providerMessageId: string;
   now?: Date;
-}): Promise<{ run_id: string; message: string; duplicate: boolean }> {
+}, options: AgentRuntimeOptions = {}): Promise<{
+  run_id: string;
+  message: string;
+  duplicate: boolean;
+}> {
   const inserted = await recordAgentMessage({
     channel: "whatsapp",
     direction: "inbound",
@@ -272,34 +290,29 @@ export async function runWhatsAppAgentTurn(input: {
         role: message.direction === "inbound" ? "user" : "assistant",
         content: message.body,
       }));
-    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
     let provenance: StoredProvenance = "fallback";
     let modelErrorCode: string | undefined;
     let answer: string;
-    if (apiKey) {
-      try {
-        answer = (
-          await runAnthropicAgentTurn(
-            { message: input.body, transcript },
-            {
-              apiKey,
-              model:
-                process.env.ANTHROPIC_MODEL?.trim() ??
-                DEFAULT_ANTHROPIC_MODEL,
-              tools: WHATSAPP_AGENT_TOOLS,
-              executeTool: (request) => executeRuntimeTool(request, context, now),
-              systemPrompt: WHATSAPP_AGENT_SYSTEM_PROMPT,
-              maxIterations: 5,
-              maxTokens: 900,
-            },
-          )
-        ).text;
-        provenance = "live";
-      } catch (error) {
-        modelErrorCode = error instanceof Error ? error.name : "unknown";
-        answer = await groundedFallbackAnswer(input.body, context, now);
-      }
-    } else {
+    try {
+      answer = (
+        await runAgentModelTurn(
+          { message: input.body, transcript },
+          {
+            model: createWorkersAiModel(
+              options.ai ?? (await getWorkersAiBinding()),
+            ),
+            tools: WHATSAPP_AGENT_TOOLS,
+            executeTool: (request) => executeRuntimeTool(request, context, now),
+            systemPrompt: WHATSAPP_AGENT_SYSTEM_PROMPT,
+            maxIterations: 5,
+            maxTokens: 900,
+            maxResponseCharacters: 1_500,
+          },
+        )
+      ).text;
+      provenance = "live";
+    } catch (error) {
+      modelErrorCode = error instanceof Error ? error.name : "unknown";
       answer = await groundedFallbackAnswer(input.body, context, now);
     }
     const finalMessage =

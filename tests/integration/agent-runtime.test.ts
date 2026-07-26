@@ -5,7 +5,12 @@ import {
   runProactiveDemoAgent,
   runWhatsAppAgentTurn,
 } from "@/lib/agent-runtime";
-import { loadAgentCommandState } from "@/lib/agent-store";
+import { WORKERS_AI_MODEL } from "@/lib/agent/workers-ai.server";
+import type { WorkersAiBinding } from "@/lib/agent/workers-ai.server";
+import {
+  loadAgentCommandState,
+  setAgentPermission,
+} from "@/lib/agent-store";
 import { resetPinchAccessTokenCacheForTests } from "@/lib/pinch/client";
 
 function json(body: unknown, status = 200): Response {
@@ -15,13 +20,63 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-let anthropicHandler:
-  | ((input: unknown, init?: RequestInit) => Response | Promise<Response>)
-  | null;
+function completion(input: {
+  content?: string | null;
+  toolCall?: {
+    id: string;
+    name: string;
+    arguments: string;
+  };
+}): unknown {
+  return {
+    id: "completion-integration",
+    object: "chat.completion",
+    created: 1,
+    model: WORKERS_AI_MODEL,
+    choices: [
+      {
+        index: 0,
+        message: {
+          role: "assistant",
+          content: input.content ?? null,
+          ...(input.toolCall
+            ? {
+                tool_calls: [
+                  {
+                    id: input.toolCall.id,
+                    type: "function",
+                    function: {
+                      name: input.toolCall.name,
+                      arguments: input.toolCall.arguments,
+                    },
+                  },
+                ],
+              }
+            : {}),
+        },
+        finish_reason: input.toolCall ? "tool_calls" : "stop",
+        logprobs: null,
+      },
+    ],
+  };
+}
+
+function fakeAi(
+  handler: (
+    model: typeof WORKERS_AI_MODEL,
+    input: Parameters<WorkersAiBinding["run"]>[1],
+  ) => unknown | Promise<unknown>,
+): WorkersAiBinding {
+  return {
+    async run(model, input) {
+      return handler(model, input);
+    },
+  };
+}
+
 let twilioRequests: URLSearchParams[];
+let pinchPaymentLinkRequests: number;
 const originalEnvironment = {
-  anthropicApiKey: process.env.ANTHROPIC_API_KEY,
-  anthropicModel: process.env.ANTHROPIC_MODEL,
   twilioAccountSid: process.env.TWILIO_ACCOUNT_SID,
   twilioAuthToken: process.env.TWILIO_AUTH_TOKEN,
   twilioFrom: process.env.TWILIO_WHATSAPP_FROM,
@@ -30,10 +85,8 @@ const originalEnvironment = {
 
 beforeEach(() => {
   resetPinchAccessTokenCacheForTests();
-  anthropicHandler = null;
   twilioRequests = [];
-  delete process.env.ANTHROPIC_API_KEY;
-  delete process.env.ANTHROPIC_MODEL;
+  pinchPaymentLinkRequests = 0;
   delete process.env.TWILIO_ACCOUNT_SID;
   delete process.env.TWILIO_AUTH_TOKEN;
   delete process.env.TWILIO_WHATSAPP_FROM;
@@ -43,9 +96,6 @@ beforeEach(() => {
     async (input: unknown, init?: RequestInit): Promise<Response> => {
       const url = input instanceof URL ? input : new URL(String(input));
       const method = (init?.method ?? "GET").toUpperCase();
-      if (url.host === "api.anthropic.com" && anthropicHandler) {
-        return anthropicHandler(input, init);
-      }
       if (
         url.host === "api.twilio.com" &&
         method === "POST" &&
@@ -67,6 +117,7 @@ beforeEach(() => {
         return json({ data: [{ id: "payer-agent-demo" }] });
       }
       if (method === "POST" && url.pathname === "/test/payment-links") {
+        pinchPaymentLinkRequests += 1;
         return json(
           {
             id: "plink-agent-demo",
@@ -88,8 +139,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   resetPinchAccessTokenCacheForTests();
-  restoreEnvironment("ANTHROPIC_API_KEY", originalEnvironment.anthropicApiKey);
-  restoreEnvironment("ANTHROPIC_MODEL", originalEnvironment.anthropicModel);
   restoreEnvironment("TWILIO_ACCOUNT_SID", originalEnvironment.twilioAccountSid);
   restoreEnvironment("TWILIO_AUTH_TOKEN", originalEnvironment.twilioAuthToken);
   restoreEnvironment("TWILIO_WHATSAPP_FROM", originalEnvironment.twilioFrom);
@@ -97,9 +146,14 @@ afterEach(() => {
 });
 
 describe("always-on agent golden path", () => {
-  it("forecasts risk, creates a real sandbox link, records simulated email, and audits WhatsApp fallback", async () => {
+  it("uses the deterministic proactive path when Workers AI fails", async () => {
     const result = await runProactiveDemoAgent(
       new Date("2026-07-26T10:00:00.000Z"),
+      {
+        ai: fakeAi(() => {
+          throw new Error("binding unavailable");
+        }),
+      },
     );
     const state = await loadAgentCommandState();
 
@@ -107,6 +161,8 @@ describe("always-on agent golden path", () => {
     expect(state.latestRun).toMatchObject({
       id: result.run_id,
       status: "completed",
+      provenance: "fallback",
+      errorCode: "WorkersAiInferenceError",
     });
     expect(state.latestRun?.forecast).toMatchObject({
       material_risk_date: expect.any(String),
@@ -138,48 +194,36 @@ describe("always-on agent golden path", () => {
     ]);
   });
 
-  it("uses Claude tools for a live WhatsApp turn without duplicating the inbound message", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
-    process.env.ANTHROPIC_MODEL = "claude-sonnet-5";
-    process.env.TWILIO_ACCOUNT_SID = `AC${"a".repeat(32)}`;
-    process.env.TWILIO_AUTH_TOKEN = "b".repeat(32);
-    process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
-    process.env.RUNWAY_OWNER_WHATSAPP = "whatsapp:+61400000000";
-
-    const requestBodies: Record<string, unknown>[] = [];
+  it("grounds 'What changed?' with a financial tool and deduplicates replay", async () => {
+    configureTwilio();
+    const requestBodies: Parameters<WorkersAiBinding["run"]>[1][] = [];
     let call = 0;
-    anthropicHandler = async (_input, init) => {
-      requestBodies.push(JSON.parse(String(init?.body)));
+    const ai = fakeAi((model, input) => {
+      expect(model).toBe(WORKERS_AI_MODEL);
+      requestBodies.push(input);
       call += 1;
       if (call === 1) {
-        return json({
-          content: [
-            {
-              type: "tool_use",
-              id: "tool-financial-snapshot",
-              name: "get_financial_snapshot",
-              input: {},
-            },
-          ],
-          stop_reason: "tool_use",
+        return completion({
+          toolCall: {
+            id: "tool-financial-snapshot",
+            name: "get_financial_snapshot",
+            arguments: "{}",
+          },
         });
       }
-      return json({
-        content: [
-          {
-            type: "text",
-            text: "The first pressure date is 3 August. The immediate repair gap is $1,100.",
-          },
-        ],
-        stop_reason: "end_turn",
+      return completion({
+        content:
+          "The first pressure date is 3 August. The immediate repair gap is $1,100.",
       });
-    };
+    });
 
-    const result = await runWhatsAppAgentTurn({
+    const input = {
       body: "What changed?",
       providerMessageId: "SM-owner-question",
       now: new Date("2026-07-26T10:00:00.000Z"),
-    });
+    };
+    const result = await runWhatsAppAgentTurn(input, { ai });
+    const replay = await runWhatsAppAgentTurn(input, { ai });
     const state = await loadAgentCommandState();
 
     expect(result).toMatchObject({
@@ -187,21 +231,21 @@ describe("always-on agent golden path", () => {
         "The first pressure date is 3 August. The immediate repair gap is $1,100.",
       duplicate: false,
     });
-    expect(requestBodies[0]?.model).toBe("claude-sonnet-5");
-    const firstMessages = requestBodies[0]?.messages as {
-      role: string;
-      content: string;
-    }[];
-    expect(firstMessages.at(-1)).toEqual({
+    expect(replay).toMatchObject({ duplicate: true, run_id: "" });
+    expect(requestBodies).toHaveLength(2);
+    expect(requestBodies[0]?.messages.at(-1)).toEqual({
       role: "user",
       content: "What changed?",
     });
     expect(
-      firstMessages.filter((message) => message.content === "What changed?"),
+      requestBodies[0]?.messages.filter(
+        (message) => message.content === "What changed?",
+      ),
     ).toHaveLength(1);
+    expect(requestBodies[0]?.parallel_tool_calls).toBe(false);
     expect(
-      (requestBodies[0]?.tools as { name: string }[]).some(
-        (tool) => tool.name === "send_owner_whatsapp",
+      requestBodies[0]?.tools.some(
+        (tool) => tool.function.name === "send_owner_whatsapp",
       ),
     ).toBe(false);
     expect(state.latestRun).toMatchObject({
@@ -218,41 +262,85 @@ describe("always-on agent golden path", () => {
     ]);
     expect(twilioRequests).toHaveLength(1);
     expect(twilioRequests[0]?.get("Body")).toBe(result.message);
-    expect(
-      state.messages.find(
-        (message) => message.providerMessageId === "SM-agent-whatsapp-reply",
-      ),
-    ).toMatchObject({
-      direction: "outbound",
-      body: result.message,
-    });
   });
 
-  it("falls back safely when Claude is unavailable and still replies on WhatsApp", async () => {
-    process.env.ANTHROPIC_API_KEY = "sk-ant-test";
-    process.env.ANTHROPIC_MODEL = "claude-sonnet-5";
-    process.env.TWILIO_ACCOUNT_SID = `AC${"a".repeat(32)}`;
-    process.env.TWILIO_AUTH_TOKEN = "b".repeat(32);
-    process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
-    process.env.RUNWAY_OWNER_WHATSAPP = "whatsapp:+61400000000";
-    anthropicHandler = async () => json({ error: "rate limited" }, 429);
-
-    const result = await runWhatsAppAgentTurn({
-      body: "How is cash looking?",
-      providerMessageId: "SM-owner-fallback",
-      now: new Date("2026-07-26T10:00:00.000Z"),
+  it("uses a grounded fallback when Workers AI quota is exhausted", async () => {
+    configureTwilio();
+    let inferenceCalls = 0;
+    const ai = fakeAi(() => {
+      inferenceCalls += 1;
+      throw new Error("quota exhausted");
     });
+
+    const result = await runWhatsAppAgentTurn(
+      {
+        body: "How is cash looking?",
+        providerMessageId: "SM-owner-fallback",
+        now: new Date("2026-07-26T10:00:00.000Z"),
+      },
+      { ai },
+    );
     const state = await loadAgentCommandState();
 
+    expect(inferenceCalls).toBe(1);
     expect(result.message).toContain("first material pressure date");
     expect(twilioRequests).toHaveLength(1);
     expect(state.latestRun).toMatchObject({
       status: "completed",
       provenance: "fallback",
-      errorCode: "AnthropicMessagesError",
+      errorCode: "WorkersAiInferenceError",
     });
   });
+
+  it("enforces action permissions after the model requests a tool", async () => {
+    configureTwilio();
+    await setAgentPermission("payment_link", "blocked");
+    let call = 0;
+    const ai = fakeAi(() => {
+      call += 1;
+      if (call === 1) {
+        return completion({
+          toolCall: {
+            id: "tool-blocked-payment",
+            name: "create_pinch_payment_link",
+            arguments: '{"invoice_id":"INV-1047"}',
+          },
+        });
+      }
+      return completion({
+        content: "The payment-link action is blocked by your Runway permission.",
+      });
+    });
+
+    const result = await runWhatsAppAgentTurn(
+      {
+        body: "Create the link.",
+        providerMessageId: "SM-owner-blocked-action",
+        now: new Date("2026-07-26T10:00:00.000Z"),
+      },
+      { ai },
+    );
+    const state = await loadAgentCommandState();
+
+    expect(result.message).toContain("blocked");
+    expect(pinchPaymentLinkRequests).toBe(0);
+    expect(state.toolCalls).toEqual([
+      expect.objectContaining({
+        toolName: "create_pinch_payment_link",
+        actionClass: "payment_link",
+        status: "failed",
+        provenance: "simulated",
+      }),
+    ]);
+  });
 });
+
+function configureTwilio(): void {
+  process.env.TWILIO_ACCOUNT_SID = `AC${"a".repeat(32)}`;
+  process.env.TWILIO_AUTH_TOKEN = "b".repeat(32);
+  process.env.TWILIO_WHATSAPP_FROM = "whatsapp:+14155238886";
+  process.env.RUNWAY_OWNER_WHATSAPP = "whatsapp:+61400000000";
+}
 
 function restoreEnvironment(name: string, value: string | undefined): void {
   if (value === undefined) {

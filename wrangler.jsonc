@@ -11,6 +11,10 @@
     "enabled": true,
     "head_sampling_rate": 1
   },
+  "ai": {
+    "binding": "AI",
+    "remote": true
+  },
   "vars": {
     "BASIQ_API_BASE_URL": "https://au-api.basiq.io",
     "BASIQ_API_VERSION": "3.0",

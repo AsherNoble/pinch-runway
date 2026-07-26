@@ -69,7 +69,8 @@ When a large supplier bill appears, Runway should:
 
 ### Agent runtime
 
-- Use Claude through a bounded tool loop to select tools and explain results.
+- Use Cloudflare Workers AI with `@cf/zai-org/glm-4.7-flash` through a bounded
+  tool loop to select tools and explain results.
 - Expose read tools for financial context, business evidence, and action history.
 - Expose action tools for Pinch links, collection email, and owner notification.
 - Enforce persisted permissions outside the model at every mutating boundary.
@@ -83,7 +84,8 @@ When a large supplier bill appears, Runway should:
 - **Gmail:** Seeded inbox evidence and simulated outbox for the MVP.
 - **Google Calendar:** Seeded project and commitment evidence for the MVP.
 - **WhatsApp:** Twilio Sandbox inbound webhook and outbound owner messages when available without unacceptable cost.
-- **Claude:** Real API tool loop when configured; visibly audited deterministic fallback otherwise.
+- **Workers AI:** Live Cloudflare AI binding with no provider API key; visibly
+  audited deterministic fallback on binding, quota, response, or loop failure.
 
 ### Command centre
 
@@ -121,7 +123,7 @@ The MVP is accepted when:
 
 - Multi-user or multi-business tenancy
 - Live Gmail or Google Calendar OAuth
-- Production WhatsApp rollout or paid messaging commitments
+- WhatsApp Business production sender migration beyond the Twilio Sandbox
 - Live Pinch invoice ingestion
 - Money movement or bank payment initiation
 - Tax calculation, lodgement, accounting reconciliation, or regulated advice

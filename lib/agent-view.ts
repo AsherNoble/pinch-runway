@@ -107,13 +107,11 @@ export function buildAgentCommandCenterModel(input: {
         provenance: "simulated",
       },
       {
-        name: "Claude",
-        status: process.env.ANTHROPIC_API_KEY ? "ready" : "not_configured",
-        detail: process.env.ANTHROPIC_API_KEY
-          ? "Bounded financial-operations tool loop"
-          : "Add ANTHROPIC_API_KEY; deterministic fallback is active",
+        name: "Workers AI",
+        status: "ready",
+        detail: "Cloudflare-bound GLM-4.7-Flash tool loop",
         updatedAt: null,
-        provenance: process.env.ANTHROPIC_API_KEY ? "live" : "fallback",
+        provenance: "live",
       },
       {
         name: "WhatsApp",
