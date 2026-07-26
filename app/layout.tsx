@@ -22,9 +22,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const forwardedProtocol = requestHeaders.get("x-forwarded-proto");
   const protocol = forwardedProtocol ?? (host.startsWith("localhost") ? "http" : "https");
   const metadataBase = new URL(`${protocol}://${host}`);
-  const title = "Runway | Bank-aware cash flow for sole traders";
+  const title = "Runway | Your always-on financial operations agent";
   const description =
-    "Separate cash available from earned receivables with a Basiq-powered 30-day runway.";
+    "An always-on financial operations agent for Australian sole traders.";
 
   return {
     metadataBase,

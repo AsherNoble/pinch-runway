@@ -23,21 +23,25 @@ async function render() {
   );
 }
 
-test("server-renders the bank-aware runway dashboard", async () => {
+test("server-renders the always-on financial operations command center", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Runway \| Bank-aware cash flow for sole traders<\/title>/i);
-  assert.match(html, /bank-aware cash flow/i);
-  assert.match(html, /Cash available now/);
-  assert.match(html, /Earned, not received/);
-  assert.match(html, /Expected position/);
-  assert.match(html, /Available cash vs expected position/);
-  assert.match(html, /Demo receivables/);
+  assert.match(
+    html,
+    /<title>Runway \| Your always-on financial operations agent<\/title>/i,
+  );
+  assert.match(html, /always-on money ops/i);
+  assert.match(html, /Thirteen-week outlook/);
+  assert.match(html, /Agent activity/);
+  assert.match(html, /Connected context/);
+  assert.match(html, /You decide how much Runway can do/);
+  assert.match(html, /Pinch payment link/);
+  assert.match(html, /Inject large bill/);
+  assert.match(html, /does not move money/i);
   assert.match(html, /Bank data unavailable/);
-  assert.doesNotMatch(html, /Create Pinch payment link/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Building your site/i);
 });
 
@@ -50,9 +54,10 @@ test("removes the disposable starter skeleton", async () => {
 
   assert.doesNotMatch(page, /_sites-preview|SkeletonPreview|codex-preview/);
   assert.match(page, /loadRunwaySnapshot/);
-  assert.match(page, /RunwayDashboard/);
+  assert.match(page, /AgentCommandCenter/);
+  assert.match(page, /loadAgentCommandState/);
   assert.match(page, /ensureRunwayProfile/);
-  assert.match(layout, /Bank-aware cash flow/);
+  assert.match(layout, /always-on financial operations agent/i);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
 
   await assert.rejects(readFile(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url), "utf8"));

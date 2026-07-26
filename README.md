@@ -1,7 +1,13 @@
 # Runway
 
-Runway is a bank-aware cash-flow assistant for one Australian sole trader. It
-keeps two ideas deliberately separate:
+Runway is an always-on financial operations agent for one Australian sole
+trader. It combines a deterministic 13-week cash forecast with a constrained
+Workers AI tool loop, a WhatsApp channel, and a web command centre. The agent can
+monitor business evidence, explain emerging cash pressure, and complete only
+the administrative actions the owner has authorised.
+
+The original bank dashboard remains available at `/bank`. Both experiences keep
+two ideas deliberately separate:
 
 - **Cash available** is money currently accessible in selected AUD transaction
   and savings accounts.
@@ -27,10 +33,54 @@ transactions and account numbers are not persisted.
 - Pending debits appear in the immediate outlook with a warning that they can
   change, but they do not affect the historical baseline.
 
-The dashboard shows 30-day `cash_only` and `expected_with_receivables` paths.
-The risk buffer is seven days of normal operating spend. An invoice follow-up is
-recommended only when the cash-only path falls below that buffer during the
-next seven days.
+The command centre shows 13 weekly `cash_only` and
+`expected_with_receivables` paths. The model never calculates balances itself:
+deterministic code produces the forecast and ranked repair target, while
+Cloudflare Workers AI runs `@cf/zai-org/glm-4.7-flash` to choose among bounded
+tools and explain the evidence. Inference uses the `AI` binding and requires no
+model API key or additional SDK.
+
+## Always-on agent demo
+
+The golden path starts when the presenter injects a seeded, explicitly
+simulated Gmail bill from Frame & Light Rentals:
+
+1. Runway combines the bill with Basiq cash data and the seeded invoice ledger.
+2. The 13-week engine identifies the first buffer breach and ranks the overdue
+   Northstar Pilates invoice as the repair target.
+3. If `payment_link` is set to `auto`, Runway creates or reuses a real Pinch
+   sandbox payment link for the first available sandbox payer.
+4. If `collection_email` is `auto`, it writes the reminder to a simulated Gmail
+   outbox. It never claims Google delivered it.
+5. Runway notifies the owner through the Twilio WhatsApp Sandbox when configured;
+   otherwise it records an explicit audit-only fallback.
+
+Every tool call records its permission decision, result, and `live`,
+`simulated`, or `fallback` provenance in D1. The hard operating limits are in
+[`RUNWAY_CHARTER.md`](./RUNWAY_CHARTER.md).
+
+To rehearse locally, apply the migrations, start the app, open `/`, expand
+**Presenter controls**, and select **Inject large bill**. **Reset agent run**
+clears agent audit/demo evidence but deliberately does not delete a genuine
+Pinch sandbox link.
+
+### WhatsApp Sandbox
+
+The integration uses Twilio’s WhatsApp Sandbox and validates Twilio’s signature
+against the exact public webhook URL before reading a message.
+
+1. Join the sandbox from the owner’s WhatsApp number.
+2. Set the Twilio values shown in `.env.example`.
+3. Set `TWILIO_WEBHOOK_PUBLIC_URL` to
+   `https://pinch-runway.asherthenoble.chatgpt.site/api/whatsapp`.
+4. Configure that exact URL as the sandbox’s incoming-message webhook using
+   `POST`.
+5. Send the sandbox number a WhatsApp message such as “What changed?”. The
+   deployed Worker handles inference and delivery without a laptop or tunnel.
+
+Leave the variables unset if the trial/sandbox available to the team would
+incur a charge; the rest of the demo remains functional and visibly reports the
+WhatsApp fallback.
 
 ## Basiq sandbox setup
 
@@ -87,8 +137,9 @@ In `test` mode, the real scheduler and Resend request run, but the actual
 recipient is always `RUNWAY_TEST_RECIPIENT`. Subject and body are marked as a
 test and record the intended dummy payer address. Live payer delivery also
 requires the separate `RUNWAY_ENABLE_LIVE_DELIVERY=1` safety lock, which should
-remain disabled until a later privacy/compliance review. Runway never creates a
-Pinch payment link automatically.
+remain disabled until a later privacy/compliance review. The legacy reminder
+scheduler never creates a Pinch payment link. The new agent can do so only
+through its separately audited `payment_link` permission.
 
 ## Configuration
 
@@ -104,6 +155,16 @@ BASIQ_WEBHOOK_SECRET=
 RUNWAY_AUTOMATION_MODE=off
 RUNWAY_TEST_RECIPIENT=
 RUNWAY_ENABLE_LIVE_DELIVERY=0
+
+RUNWAY_ENABLE_DEMO_AGENT=1
+
+TWILIO_ACCOUNT_SID=
+TWILIO_AUTH_TOKEN=
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+RUNWAY_OWNER_WHATSAPP=
+TWILIO_WEBHOOK_PUBLIC_URL=https://pinch-runway.asherthenoble.chatgpt.site/api/whatsapp
+
+RUNWAY_PAYMENT_RETURN_URL=http://localhost:3000/
 
 RESEND_API_KEY=
 RESEND_FROM=Runway <onboarding@resend.dev>
@@ -133,12 +194,14 @@ npx wrangler dev --test-scheduled
 ```
 
 The full integration suite uses a real local D1 binding through Cloudflare’s
-Vitest pool. It does not call Basiq or Resend over the network.
+Vitest pool and injects a fake Workers AI binding. It does not call Workers AI,
+Basiq, or Resend over the network.
 
 ## Scope
 
-This remains a single-trader prototype with ChatGPT operator authentication and
-AUD-only cash forecasting. Non-AUD accounts are visible but excluded.
-Multi-tenancy, verified live invoice ingestion, and production payer delivery
-are deferred. The output is operational cash-flow guidance, not accounting,
-tax, credit, investment, or personal financial advice.
+This remains a single-trader prototype with ChatGPT operator authentication,
+AUD-only cash forecasting, seeded Gmail/Calendar evidence, and a simulated
+Gmail outbox. Non-AUD accounts are visible but excluded. Multi-tenancy, live
+Google OAuth, verified live invoice ingestion, and production payer delivery
+are deferred. Runway cannot move money, negotiate, lodge tax, or give
+accounting, tax, credit, investment, legal, or personal financial advice.

@@ -202,3 +202,105 @@ export const basiqWebhookEvents = sqliteTable("basiq_webhook_events", {
   eventType: text("event_type").notNull(),
   entityUrl: text("entity_url"),
 });
+
+export const agentPermissions = sqliteTable("agent_permissions", {
+  actionClass: text("action_class", {
+    enum: [
+      "collection_email",
+      "payment_link",
+      "calendar_edit",
+      "receipt_request",
+    ],
+  }).primaryKey(),
+  mode: text("mode", {
+    enum: ["blocked", "ask", "auto"],
+  }).notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const agentRuns = sqliteTable(
+  "agent_runs",
+  {
+    id: text("id").primaryKey(),
+    triggerType: text("trigger_type", {
+      enum: ["demo_event", "whatsapp", "manual"],
+    }).notNull(),
+    status: text("status", {
+      enum: ["running", "awaiting_approval", "completed", "failed"],
+    }).notNull(),
+    provenance: text("provenance", {
+      enum: ["live", "simulated", "fallback"],
+    }).notNull(),
+    startedAt: text("started_at").notNull(),
+    completedAt: text("completed_at"),
+    summary: text("summary"),
+    forecastJson: text("forecast_json"),
+    errorCode: text("error_code"),
+  },
+  (table) => [index("agent_runs_started").on(table.startedAt)],
+);
+
+export const agentToolCalls = sqliteTable(
+  "agent_tool_calls",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
+    toolName: text("tool_name").notNull(),
+    actionClass: text("action_class"),
+    status: text("status", {
+      enum: ["proposed", "awaiting_approval", "succeeded", "failed"],
+    }).notNull(),
+    provenance: text("provenance", {
+      enum: ["live", "simulated", "fallback"],
+    }).notNull(),
+    inputJson: text("input_json").notNull(),
+    resultJson: text("result_json"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("agent_tool_calls_run").on(table.runId, table.createdAt)],
+);
+
+export const agentMessages = sqliteTable(
+  "agent_messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    runId: text("run_id"),
+    channel: text("channel", {
+      enum: ["whatsapp", "web", "system"],
+    }).notNull(),
+    direction: text("direction", {
+      enum: ["inbound", "outbound"],
+    }).notNull(),
+    providerMessageId: text("provider_message_id"),
+    body: text("body").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("agent_messages_provider_id").on(table.providerMessageId),
+    index("agent_messages_created").on(table.createdAt),
+  ],
+);
+
+export const simulatedOutbox = sqliteTable(
+  "simulated_outbox",
+  {
+    id: text("id").primaryKey(),
+    runId: text("run_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    recipient: text("recipient").notNull(),
+    subject: text("subject").notNull(),
+    body: text("body").notNull(),
+    status: text("status", { enum: ["drafted", "sent"] }).notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [index("simulated_outbox_run").on(table.runId, table.createdAt)],
+);
+
+export const demoAgentState = sqliteTable("demo_agent_state", {
+  id: integer("id").primaryKey(),
+  scenarioState: text("scenario_state", {
+    enum: ["ready", "triggered", "completed"],
+  }).notNull(),
+  activeRunId: text("active_run_id"),
+  updatedAt: text("updated_at").notNull(),
+});
