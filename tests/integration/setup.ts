@@ -10,6 +10,12 @@ process.env.PINCH_SECRET_KEY = "sk_test";
 process.env.PINCH_API_VERSION = "2020.1";
 process.env.PINCH_API_BASE_URL = "https://api.getpinch.com.au/test/";
 process.env.PINCH_WEBHOOK_SECRET = "whsec_test_secret";
+process.env.BASIQ_API_KEY = "basiq_test_key";
+process.env.BASIQ_API_BASE_URL = "https://au-api.basiq.io";
+process.env.BASIQ_API_VERSION = "3.0";
+process.env.BASIQ_WEBHOOK_SECRET = `whsec_${btoa("basiq_webhook_test_secret")}`;
+process.env.RUNWAY_AUTOMATION_MODE = "test";
+process.env.RUNWAY_TEST_RECIPIENT = "operator@example.test";
 
 // Apply the real schema once; isolatedStorage rolls back each test's writes.
 await applyD1Migrations(env.DB, env.TEST_MIGRATIONS);

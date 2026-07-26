@@ -1,4 +1,10 @@
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 /** Minimal, non-sensitive action ledger. Australia/Sydney date is supplied by server code. */
 export const collectionActions = sqliteTable("collection_actions", {
@@ -23,4 +29,176 @@ export const pinchWebhookEvents = sqliteTable("pinch_webhook_events", {
   eventType: text("event_type").notNull(),
   paymentId: text("payment_id"),
   status: text("status"),
+});
+
+export const runwayProfiles = sqliteTable("runway_profiles", {
+  id: integer("id").primaryKey(),
+  operatorEmail: text("operator_email").notNull(),
+  basiqUserId: text("basiq_user_id"),
+  bankState: text("bank_state", {
+    enum: [
+      "connected",
+      "syncing",
+      "stale",
+      "consent_required",
+      "error",
+      "demo",
+    ],
+  }).notNull(),
+  consentStatus: text("consent_status", {
+    enum: ["unknown", "valid", "required", "revoked", "expired"],
+  }).notNull(),
+  connectStateHash: text("connect_state_hash"),
+  lastSyncedAt: text("last_synced_at"),
+  syncError: text("sync_error"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+
+export const bankAccounts = sqliteTable(
+  "bank_accounts",
+  {
+    accountId: text("account_id").primaryKey(),
+    profileId: integer("profile_id").notNull(),
+    name: text("name").notNull(),
+    maskedNumber: text("masked_number"),
+    institution: text("institution"),
+    accountClass: text("account_class").notNull(),
+    cashRole: text("cash_role").notNull(),
+    currency: text("currency").notNull(),
+    balanceCents: integer("balance_cents").notNull(),
+    availableFundsCents: integer("available_funds_cents"),
+    selected: integer("selected", { mode: "boolean" }).notNull(),
+    lastUpdatedAt: text("last_updated_at"),
+    syncedAt: text("synced_at").notNull(),
+  },
+  (table) => [
+    index("bank_accounts_profile_selected").on(table.profileId, table.selected),
+  ],
+);
+
+export const bankSnapshots = sqliteTable(
+  "bank_snapshots",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id").notNull(),
+    createdAt: text("created_at").notNull(),
+    operatingCashCents: integer("operating_cash_cents").notNull(),
+    liabilitiesCents: integer("liabilities_cents").notNull(),
+    expenseProfileJson: text("expense_profile_json"),
+  },
+  (table) => [index("bank_snapshots_profile_created").on(table.profileId, table.createdAt)],
+);
+
+export const expenseExclusions = sqliteTable(
+  "expense_exclusions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    profileId: integer("profile_id").notNull(),
+    pattern: text("pattern").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("expense_exclusions_profile_pattern").on(
+      table.profileId,
+      table.pattern,
+    ),
+  ],
+);
+
+export const receivables = sqliteTable(
+  "receivables",
+  {
+    id: text("id").primaryKey(),
+    payerName: text("payer_name").notNull(),
+    payerEmail: text("payer_email").notNull(),
+    safeAddress: text("safe_address").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    issuedDate: text("issued_date").notNull(),
+    dueDate: text("due_date").notNull(),
+    status: text("status", {
+      enum: ["unpaid", "paid", "written_off"],
+    }).notNull(),
+    paidDate: text("paid_date"),
+    payerHistoryCount: integer("payer_history_count").notNull(),
+    avgDaysLate: integer("avg_days_late"),
+    reminderCount: integer("reminder_count").notNull(),
+    lastReminderAt: text("last_reminder_at"),
+    source: text("source", { enum: ["demo"] }).notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("receivables_status_due").on(table.status, table.dueDate),
+  ],
+);
+
+export const reminderDecisions = sqliteTable(
+  "reminder_decisions",
+  {
+    id: text("id").primaryKey(),
+    localDate: text("local_date").notNull(),
+    evaluatedAt: text("evaluated_at").notNull(),
+    targetReceivableId: text("target_receivable_id"),
+    eligible: integer("eligible", { mode: "boolean" }).notNull(),
+    suppressionReason: text("suppression_reason"),
+    earliestBreachDate: text("earliest_breach_date"),
+    riskBufferCents: integer("risk_buffer_cents").notNull(),
+    cashAtBreachCents: integer("cash_at_breach_cents"),
+    repairAmountCents: integer("repair_amount_cents"),
+    forecastJson: text("forecast_json").notNull(),
+  },
+  (table) => [
+    uniqueIndex("reminder_decisions_local_target").on(
+      table.localDate,
+      table.targetReceivableId,
+    ),
+  ],
+);
+
+export const reminderDeliveries = sqliteTable(
+  "reminder_deliveries",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    decisionId: text("decision_id").notNull(),
+    receivableId: text("receivable_id").notNull(),
+    reminderSequence: integer("reminder_sequence").notNull(),
+    intendedRecipient: text("intended_recipient").notNull(),
+    actualRecipient: text("actual_recipient").notNull(),
+    automationMode: text("automation_mode", {
+      enum: ["test", "live"],
+    }).notNull(),
+    providerDeliveryId: text("provider_delivery_id"),
+    status: text("status", {
+      enum: ["reserved", "sent", "failed", "cancelled"],
+    }).notNull(),
+    reservedAt: text("reserved_at").notNull(),
+    sentAt: text("sent_at"),
+    terminalAt: text("terminal_at"),
+    errorCode: text("error_code"),
+  },
+  (table) => [
+    uniqueIndex("reminder_deliveries_decision").on(table.decisionId),
+    uniqueIndex("reminder_deliveries_invoice_sequence").on(
+      table.receivableId,
+      table.reminderSequence,
+    ),
+  ],
+);
+
+export const schedulerExecutions = sqliteTable("scheduler_executions", {
+  localDate: text("local_date").primaryKey(),
+  startedAt: text("started_at").notNull(),
+  completedAt: text("completed_at"),
+  status: text("status", {
+    enum: ["running", "completed", "failed", "skipped"],
+  }).notNull(),
+  decisionId: text("decision_id"),
+  errorCode: text("error_code"),
+});
+
+export const basiqWebhookEvents = sqliteTable("basiq_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  receivedAt: text("received_at").notNull(),
+  eventType: text("event_type").notNull(),
+  entityUrl: text("entity_url"),
 });

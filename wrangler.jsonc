@@ -1,6 +1,22 @@
 {
+  "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "pinch-runway",
-  "compatibility_date": "2026-07-25",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-07-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  },
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+  "vars": {
+    "BASIQ_API_BASE_URL": "https://au-api.basiq.io",
+    "BASIQ_API_VERSION": "3.0",
+    "RUNWAY_AUTOMATION_MODE": "off",
+    "RUNWAY_ENABLE_LIVE_DELIVERY": "0"
+  },
   "d1_databases": [
     {
       "binding": "DB",

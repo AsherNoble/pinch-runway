@@ -1,60 +1,118 @@
-# Pinch Runway
+# Runway
 
-> Pinch helps a business get paid. Runway tells the owner what to do while they are still waiting.
+Runway is a bank-aware cash-flow assistant for one Australian sole trader. It
+keeps two ideas deliberately separate:
 
-Pinch Runway is a pings-first cash-flow companion for Australian sole traders
-who collect from their own clients through Pinch. It focuses on one gap that a
-bank cannot see: money already earned but not yet landed.
+- **Cash available** is money currently accessible in selected AUD transaction
+  and savings accounts.
+- **Earned, not received** is the unpaid demo invoice ledger. It contributes to
+  an expected position, but is never presented as spendable cash.
 
-It is deliberately **not** a household budget, bank-feed product, personal
-financial-advice tool, email/calendar integration, or salaried-employee flow.
+The bank connection is a real Basiq sandbox integration. Receivables are safe,
+seeded D1 records and are labelled as demo throughout the product; they are not
+live Pinch invoices.
 
-## Current scaffold state
+## How the forecast works
 
-The foundation is ready for three people to build against in parallel:
+Runway fetches up to 90 days of Basiq transactions during a sync. Raw
+transactions and account numbers are not persisted.
 
-- shared TypeScript contract in `lib/contracts.ts`, with integer cents and
-  explicit data provenance;
-- deterministic, clearly non-live fixtures for Comfortable, Safe, Tight, and
-  Shortfall in `lib/demo-fixtures.ts`;
-- a pings-first fixture dashboard that cannot present seed data as live Pinch
-  data;
-- server-only Pinch token/client primitives and a real read-only health probe
-  at `GET /api/pinch/health`;
-- a CI workflow, environment template, live-sandbox runbook, and publish-ready
-  issue backlog in `docs/backlog/`.
+- Posted debits form the historical baseline.
+- Transfers, duplicate credit-card repayments, and owner exclusion patterns are
+  removed.
+- A recurring cost needs at least three payments with a consistent weekly,
+  fortnightly, or monthly cadence and amounts within 10%.
+- Recurring costs are projected on their observed cadence. Remaining variable
+  spend uses its trailing daily average.
+- Pending debits appear in the immediate outlook with a warning that they can
+  change, but they do not affect the historical baseline.
 
-The sandbox credential path has now made a real Payer read and a real Payment
-Link write; redacted proof is recorded in
-[`docs/pinch-sandbox-evidence.md`](docs/pinch-sandbox-evidence.md). The product
-UI remains an explicitly labelled fixture preview until Lane A completes the
-normalised live snapshot and reliability adapter. Run `npm run
-check:pinch-sandbox` only after adding real sandbox credentials and setting
-`RUNWAY_DATA_SOURCE=sandbox`. That command makes an authenticated request to
-the real Pinch sandbox; it does not fall back to fixtures.
+The dashboard shows 30-day `cash_only` and `expected_with_receivables` paths.
+The risk buffer is seven days of normal operating spend. An invoice follow-up is
+recommended only when the cash-only path falls below that buffer during the
+next seven days.
 
-## The hard Pinch boundary
+## Basiq sandbox setup
 
-The published Pinch API exposes Payers, Payments, Payment Links, and payment
-attempt history. It does not currently document an Invoice resource or an
-email/SMS reminder-send endpoint.
+1. Create a Basiq application and API key.
+2. In Basiq’s Customise UI, configure the application redirect URL as:
+   `https://YOUR_HOST/api/basiq/callback`.
+3. Enable the account and transaction scopes needed by the product.
+4. Add the API key and webhook signing secret as server-side deployment
+   secrets.
+5. Sign in with ChatGPT, select **Connect Basiq sandbox**, and complete the
+   hosted Hooli consent journey.
+6. When the asynchronous import finishes, select the accounts that belong to
+   the business.
 
-Therefore, this repo makes these facts explicit:
+Basiq server tokens are held only in memory. The CLIENT_ACCESS token is used
+only for the required full-page hosted consent redirect and is never written to
+D1 or application logs.
 
-- Runway’s `Invoice` is a normalised product type built from a real Pinch
-  Payment/Payment Link, never invented JSON that mimics an API response.
-- A scheduled Pinch Payment’s `transactionDate` may only be treated as a due
-  date when the sandbox records are configured with that meaning.
-- Reliability compares the scheduled payment date with a successful attempt’s
-  `transactionDate`; it must not use `actualTransferDate`, which is settlement
-  timing rather than payer lateness.
-- The real write action is **Create Pinch payment link**. If Pinch only creates
-  a URL, the UI must say “Payment link ready to share,” not “Sent via Pinch.”
+## Data retained in D1
 
-See [ADR 001](docs/adr/001-pinch-payments-not-invoices.md) for the rationale
-and primary documentation links.
+Runway stores:
 
-## Local setup
+- the single Basiq user ID;
+- selected Basiq account IDs, display names, last-four masks, classes, currency,
+  balances, and freshness timestamps;
+- derived cash totals and expense aggregates;
+- merchant exclusion patterns;
+- the explicitly demo receivables ledger;
+- reminder decisions, provider delivery IDs, and scheduler execution locks;
+- Basiq webhook IDs for replay protection.
+
+Runway does not store full account numbers, Basiq access tokens, or raw
+transaction history. A consent revocation/expiry or connection-deletion webhook
+immediately disables bank-aware automation and removes locally derived bank
+data. Choosing **Disconnect** permanently deletes the prototype Basiq user and
+performs the same local purge.
+
+## Reminder automation
+
+Cloudflare invokes the scheduled handler hourly. The handler evaluates only at
+8:00 AM Australia/Sydney on weekdays, so daylight-saving changes do not shift
+the business-time policy. A D1 local-date lock makes repeated cron delivery
+idempotent.
+
+An automatic reminder requires all of the following:
+
+- a cash-only buffer breach within seven days;
+- fresh, consented bank data and a known receivable status;
+- an overdue invoice selected by the deterministic repair ranking;
+- at least 72 hours since the invoice’s previous reminder;
+- fewer than five automatic reminders.
+
+In `test` mode, the real scheduler and Resend request run, but the actual
+recipient is always `RUNWAY_TEST_RECIPIENT`. Subject and body are marked as a
+test and record the intended dummy payer address. Live payer delivery also
+requires the separate `RUNWAY_ENABLE_LIVE_DELIVERY=1` safety lock, which should
+remain disabled until a later privacy/compliance review. Runway never creates a
+Pinch payment link automatically.
+
+## Configuration
+
+Copy `.env.example` to `.env.local`. Never use a `NEXT_PUBLIC_` name for Basiq,
+Resend, Pinch, or operator secrets.
+
+```dotenv
+BASIQ_API_KEY=
+BASIQ_API_BASE_URL=https://au-api.basiq.io
+BASIQ_API_VERSION=3.0
+BASIQ_WEBHOOK_SECRET=
+
+RUNWAY_AUTOMATION_MODE=off
+RUNWAY_TEST_RECIPIENT=
+RUNWAY_ENABLE_LIVE_DELIVERY=0
+
+RESEND_API_KEY=
+RESEND_FROM=Runway <onboarding@resend.dev>
+```
+
+`RUNWAY_AUTOMATION_MODE` accepts `off`, `test`, or `live` and defaults to
+`off`.
+
+## Development
 
 ```bash
 npm install
@@ -62,107 +120,25 @@ cp .env.example .env.local
 npm run dev
 ```
 
-The dashboard is available at the local address printed by the development
-server. It begins in explicitly labelled `seed` mode.
-
-### Live Pinch sandbox check
-
-Add the application ID and secret key to `.env.local`, then set:
-
-```dotenv
-RUNWAY_DATA_SOURCE=sandbox
-PINCH_APPLICATION_ID=...
-PINCH_SECRET_KEY=...
-```
-
-Run:
-
-```bash
-npm run check:pinch-sandbox
-```
-
-Expected proof is a successful `GET /test/payers` request using a server-side
-OAuth client-credentials token. The same read-only probe is exposed at
-`/api/pinch/health`; it returns a failure state instead of fixtures when Pinch
-is unconfigured or unavailable.
-
-Never put a Pinch secret in a `NEXT_PUBLIC_*` variable, browser request, test
-fixture, screenshot, or log.
-
-### Deliberate test-data bootstrap
-
-After the read-only check passes, this explicit, test-only command creates two
-labelled sandbox Payers. Adding the second flag creates one real sandbox
-Payment Link for the first Payer. It never calls Pinch's live base URL, never
-prints the returned link URL, and never sends a reminder or email.
-
-```bash
-npm run bootstrap:pinch-sandbox -- --confirm-test-write --create-payment-link
-```
-
-The command reuses Payers with its fixed test email addresses, but every use of
-`--create-payment-link` deliberately creates a new link. Do not rerun that
-flag unless a new sandbox link is intended.
-
-### Internal G3 test-history tool
-
-`/internal/pinch-sandbox` is a deliberately hidden, off-by-default local tool
-for creating genuine test payment history. It requires all of the following
-server-only local settings before it exists: `PINCH_PUBLISHABLE_KEY` (which
-must start with `pk_test_`), `RUNWAY_ENABLE_SANDBOX_SETUP_UI=1`, and an operator
-token. The page passes only the publishable key to Pinch CaptureJS; documented
-test bank details are tokenised in the browser and never reach Runway's server.
-
-It may create real test sources and scheduled Payments, then uses Pinch's
-documented `Time-Travel` header only against the test API. It is neither
-enabled nor linked from the product, and it must stay disabled outside this
-local setup workflow.
-
-## Development commands
+Useful checks:
 
 ```bash
 npm run lint
 npm run test:domain
+npm run test:integration
 npm run build
 npm test
+npx wrangler d1 migrations apply pinch-runway --local
+npx wrangler dev --test-scheduled
 ```
 
-`npm test` runs pure contract/client tests, builds the app, and checks the
-rendered page. It intentionally does not perform a live sandbox call in CI.
+The full integration suite uses a real local D1 binding through Cloudflare’s
+Vitest pool. It does not call Basiq or Resend over the network.
 
-## Team lanes
+## Scope
 
-There are exactly three lanes. Claim the first open issue in one lane, assign
-yourself on GitHub, and work forward through its dependencies rather than
-starting a second lane in parallel.
-
-| Lane | Owns | Starts with |
-| --- | --- | --- |
-| A — Pinch (**AsherNoble**) | authenticated live reads, normalisation, payment history/reliability, Payment Link write | [`PIN-01` / #4](https://github.com/AsherNoble/pinch-runway/issues/4) |
-| B — Engine | seven-day forecast policy, four states, payer-choice reasoning, ping copy | `ENG-01` |
-| C — Frontend | pings feed, declared-input flows, fallback dashboard, live action UX | `UX-01` |
-
-**Lane B:** start with [ENG-01 / #9](https://github.com/AsherNoble/pinch-runway/issues/9).
-
-**Lane C:** start with [UX-01 / #13](https://github.com/AsherNoble/pinch-runway/issues/13).
-
-Each issue is also labelled `lane:pinch`, `lane:engine`, or `lane:frontend`.
-The full dependency map remains in
-[`docs/backlog/`](docs/backlog/README.md). All checkpoint-critical work is
-marked `P0` and carries its live-sandbox gate.
-
-
-
-## Tomorrow’s live gate
-
-The demo is only ready when all five gates have evidence:
-
-1. **G1:** authenticated real-sandbox endpoint/field mapping.
-2. **G2:** normalised snapshot derived from real Payers and Payments.
-3. **G3:** reliability derived from real paid history/attempts.
-4. **G4:** a confirmed real sandbox Payment Link/payment-request write.
-5. **G5:** a deployed end-to-end rehearsal using fresh sandbox data.
-
-If a Pinch field, endpoint, or dispatch capability is unavailable, record it as
-a hard blocker. Do not substitute a mock, make up a due date, or say a link was
-sent when it was only created.
+This remains a single-trader prototype with ChatGPT operator authentication and
+AUD-only cash forecasting. Non-AUD accounts are visible but excluded.
+Multi-tenancy, verified live invoice ingestion, and production payer delivery
+are deferred. The output is operational cash-flow guidance, not accounting,
+tax, credit, investment, or personal financial advice.

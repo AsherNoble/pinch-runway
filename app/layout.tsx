@@ -22,9 +22,9 @@ export async function generateMetadata(): Promise<Metadata> {
   const forwardedProtocol = requestHeaders.get("x-forwarded-proto");
   const protocol = forwardedProtocol ?? (host.startsWith("localhost") ? "http" : "https");
   const metadataBase = new URL(`${protocol}://${host}`);
-  const title = "Pinch Runway | Earned money, clearer next moves";
+  const title = "Runway | Bank-aware cash flow for sole traders";
   const description =
-    "A pings-first cash-flow companion for sole traders collecting through Pinch.";
+    "Separate cash available from earned receivables with a Basiq-powered 30-day runway.";
 
   return {
     metadataBase,
@@ -40,10 +40,10 @@ export async function generateMetadata(): Promise<Metadata> {
       type: "website",
       images: [
         {
-          url: "/og.png",
-          width: 1730,
-          height: 909,
-          alt: "Pinch Runway — See the money you’ve earned before it lands.",
+          url: "/og-runway.png",
+          width: 1734,
+          height: 907,
+          alt: "Runway — know what is cash and what is coming.",
         },
       ],
     },
@@ -51,7 +51,7 @@ export async function generateMetadata(): Promise<Metadata> {
       card: "summary_large_image",
       title,
       description,
-      images: ["/og.png"],
+      images: ["/og-runway.png"],
     },
   };
 }

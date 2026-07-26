@@ -1,281 +1,340 @@
-import type { PinchReadiness } from "@/lib/pinch/config";
-import type { RunwayViewModel } from "@/lib/runway-view";
-import { PaymentLinkAction } from "./payment-link-action";
+import type { RunwaySnapshot } from "@/lib/runway-contracts";
+import { BankControls } from "./bank-controls";
+import { ExpenseExclusions } from "./expense-exclusions";
 
 interface RunwayDashboardProps {
-  view: RunwayViewModel;
-  readiness: PinchReadiness;
+  snapshot: RunwaySnapshot;
+  jobIds?: string;
+  signedInEmail?: string | null;
 }
 
-function formatAud(cents: number) {
+function aud(cents: number, precise = false) {
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
     currency: "AUD",
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
+    minimumFractionDigits: precise ? 2 : 0,
+    maximumFractionDigits: precise ? 2 : 0,
   }).format(cents / 100);
 }
 
-function formatDate(value: string) {
+function shortDate(value: string) {
   return new Intl.DateTimeFormat("en-AU", {
-    weekday: "short",
     day: "numeric",
     month: "short",
-  }).format(new Date(value + "T12:00:00"));
+  }).format(new Date(`${value}T12:00:00Z`));
 }
 
-function invoiceStatusLabel(invoice: RunwayViewModel["snapshot"]["invoices"][number]) {
-  if (invoice.pinch_dishonoured) return "Pinch dishonour recorded";
-  if (invoice.payment_method_on_file === false) return "No payment method on file";
-  return "Collection pending";
+function freshness(snapshot: RunwaySnapshot) {
+  if (!snapshot.bank_source.last_synced_at) return snapshot.bank_source.display_label;
+  return `${snapshot.bank_source.display_label} · ${new Intl.DateTimeFormat("en-AU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Australia/Sydney",
+  }).format(new Date(snapshot.bank_source.last_synced_at))}`;
 }
 
-function sourceTag(view: RunwayViewModel) {
-  if (view.snapshot.data_source.is_live) return "Live sandbox";
-  if (view.snapshot.data_source.source === "demo_fixture") return "Fixture";
-  return "Sandbox unavailable";
-}
-
-function provenanceCopy(view: RunwayViewModel) {
-  const source = view.snapshot.data_source;
-
-  if (source.source === "demo_fixture") {
+function ForecastChart({ snapshot }: { snapshot: RunwaySnapshot }) {
+  const points = snapshot.forecast?.points ?? [];
+  if (!points.length) {
     return (
-      <>
-        <strong>Fixture preview.</strong> Every number below is deterministic
-        demo data, not a Pinch call or a bank balance. Selecting sandbox mode
-        will never fall back here if a live call fails.
-      </>
-    );
-  }
-
-  if (source.is_live) {
-    return (
-      <>
-        <strong>Live Pinch sandbox data.</strong> This snapshot is labelled
-        from its source and the coverage floor below is not a bank balance.
-      </>
-    );
-  }
-
-  return (
-    <>
-      <strong>Pinch sandbox data is unavailable.</strong> {source.error_message ??
-        "No fixture substitute is shown for a failed live read."}
-    </>
-  );
-}
-
-function PingAction({
-  cta,
-}: {
-  cta: RunwayViewModel["pings"][number]["cta"];
-}) {
-  if (cta.label === "Create Pinch payment link") {
-    return (
-      <div className="ping-actions" aria-label="Pinch payment link action status">
-        <PaymentLinkAction invoiceId={cta.action.target_invoice_id} />
+      <div className="forecast-empty">
+        Connect Basiq and select at least one AUD deposit account to build the
+        30-day forecast.
       </div>
     );
   }
+  const values = points.flatMap((point) => [
+    point.cash_only_cents,
+    point.expected_with_receivables_cents,
+  ]);
+  const min = Math.min(...values, snapshot.forecast!.risk_buffer_cents, 0);
+  const max = Math.max(...values, snapshot.forecast!.risk_buffer_cents, 1);
+  const range = Math.max(1, max - min);
+  const x = (index: number) => 28 + (index / (points.length - 1)) * 704;
+  const y = (value: number) => 210 - ((value - min) / range) * 170;
+  const line = (key: "cash_only_cents" | "expected_with_receivables_cents") =>
+    points.map((point, index) => `${x(index)},${y(point[key])}`).join(" ");
 
   return (
-    <div className="ping-actions ping-actions-status">
-      <span className="ping-status-label">{cta.label}</span>
+    <div className="chart-wrap">
+      <svg
+        aria-label="Thirty-day cash forecast"
+        className="forecast-chart"
+        role="img"
+        viewBox="0 0 760 245"
+      >
+        <line className="chart-axis" x1="28" x2="732" y1={y(0)} y2={y(0)} />
+        <line
+          className="chart-buffer"
+          x1="28"
+          x2="732"
+          y1={y(snapshot.forecast!.risk_buffer_cents)}
+          y2={y(snapshot.forecast!.risk_buffer_cents)}
+        />
+        <polyline className="chart-line chart-cash" points={line("cash_only_cents")} />
+        <polyline
+          className="chart-line chart-expected"
+          points={line("expected_with_receivables_cents")}
+        />
+        <text x="28" y="236">{shortDate(points[0].date)}</text>
+        <text textAnchor="end" x="732" y="236">{shortDate(points.at(-1)!.date)}</text>
+      </svg>
+      <div className="chart-legend">
+        <span><i className="legend-cash" />Cash only</span>
+        <span><i className="legend-expected" />With expected receivables</span>
+        <span><i className="legend-buffer" />Seven-day buffer</span>
+      </div>
     </div>
   );
 }
 
-/**
- * Presentational only: it consumes a labelled, shared-contract view model
- * rather than raw Pinch payloads. The same component can render a future live
- * snapshot without swapping UI logic or silently displaying fixtures.
- */
+function recommendation(snapshot: RunwaySnapshot) {
+  const decision = snapshot.reminder_decision;
+  if (decision?.eligible && decision.target_receivable_id) {
+    const item = snapshot.receivables.find(
+      (receivable) => receivable.id === decision.target_receivable_id,
+    );
+    return {
+      kicker: "Cash buffer action",
+      title: `Follow up ${item?.payer_name ?? decision.target_receivable_id}`,
+      body:
+        `The cash-only path breaches your seven-day buffer on ${shortDate(
+          decision.earliest_breach_date!,
+        )}. This overdue ${aud(item?.amount_cents ?? 0)} invoice repairs the most of the earliest gap.`,
+    };
+  }
+  if (snapshot.bank_source.state === "stale") {
+    return {
+      kicker: "Refresh before acting",
+      title: "Bank data is too old for a recommendation",
+      body: "Refresh the Basiq connection. Automatic reminders are paused while bank data is over 24 hours old.",
+    };
+  }
+  if (!snapshot.forecast) {
+    return {
+      kicker: "Set up your runway",
+      title: "Connect and choose your business accounts",
+      body: "Runway will keep bank cash separate from invoices you have earned but not received.",
+    };
+  }
+  return {
+    kicker: "No immediate chase needed",
+    title: "Your seven-day cash buffer holds",
+    body: "The cash-only forecast does not breach the operating buffer in the next seven days. Expected invoices remain visible but are not counted as available cash.",
+  };
+}
+
 export function RunwayDashboard({
-  view,
-  readiness,
+  snapshot,
+  jobIds,
+  signedInEmail,
 }: RunwayDashboardProps) {
-  const { snapshot, analysis, forecast, pings } = view;
-  const unpaidInvoices = snapshot.invoices.filter(
-    (invoice) => invoice.status === "unpaid",
-  );
-  const unpaidCollections = unpaidInvoices.reduce(
-    (total, invoice) => total + invoice.amount,
-    0,
-  );
+  const expectedClosing =
+    snapshot.forecast?.expected_with_receivables.closing_position_cents ?? null;
+  const action = recommendation(snapshot);
+  const unpaid = snapshot.receivables.filter((item) => item.status === "unpaid");
+  const hasSelectedAccounts = snapshot.accounts.some((account) => account.selected);
 
   return (
-    <main className="runway-shell">
-      <section className="runway-hero" aria-labelledby="runway-title">
+    <main className="runway-shell runway-v2">
+      <header className="runway-hero">
         <div>
-          <p className="eyebrow">Pinch Runway</p>
-          <h1 id="runway-title">See the money you’ve earned before it lands.</h1>
+          <p className="eyebrow">Runway · bank-aware cash flow</p>
+          <h1>Know what’s cash. Know what’s coming.</h1>
           <p className="hero-copy">
-            A pings-first cash-flow companion for sole traders collecting from
-            their own clients through Pinch.
+            A 30-day operating view for one Australian sole trader, powered by
+            selected Basiq sandbox accounts and an explicitly demo receivables ledger.
           </p>
         </div>
-        <div className={"connection-badge connection-" + readiness.state}>
-          <span aria-hidden="true" className="status-dot" />
-          <span>{readiness.display_label}</span>
+        <div className={`source-badge source-${snapshot.bank_source.state}`}>
+          <span className="status-dot" aria-hidden="true" />
+          {snapshot.bank_source.state.replace("_", " ")}
+        </div>
+      </header>
+
+      <section className="source-strip" aria-label="Data freshness">
+        <div>
+          <strong>Bank:</strong> {freshness(snapshot)}
+          {snapshot.bank_source.message ? ` — ${snapshot.bank_source.message}` : ""}
+        </div>
+        <div>
+          <strong>Receivables:</strong> {snapshot.receivables_source.display_label}
         </div>
       </section>
 
-      <section className="provenance-notice" aria-label="Data provenance">
-        {provenanceCopy(view)}
+      <section className="metric-grid" aria-label="Cash flow summary">
+        <article className="metric-card metric-cash">
+          <span>Cash available now</span>
+          <strong>{aud(snapshot.operating_cash_cents)}</strong>
+          <p>Selected AUD deposit accounts only. Credit and loans are excluded.</p>
+        </article>
+        <article className="metric-card">
+          <span>Earned, not received</span>
+          <strong>{aud(snapshot.earned_not_received_cents)}</strong>
+          <p>Unpaid demo invoices. This is not spendable cash.</p>
+        </article>
+        <article className="metric-card">
+          <span>Expected position · 30 days</span>
+          <strong>{expectedClosing === null ? "—" : aud(expectedClosing)}</strong>
+          <p>Cash plus expected invoice arrivals, with uncertainty shown below.</p>
+        </article>
+        <article className="metric-card metric-liability">
+          <span>Selected credit & loans</span>
+          <strong>{aud(snapshot.liabilities_cents)}</strong>
+          <p>Shown separately; borrowing capacity is never treated as cash.</p>
+        </article>
       </section>
 
-      <div className="runway-grid">
-        <section className="ping-panel" aria-labelledby="pings-title">
+      <section className="primary-action">
+        <div>
+          <p className="eyebrow">{action.kicker}</p>
+          <h2>{action.title}</h2>
+        </div>
+        <p>{action.body}</p>
+        <span className={`automation-pill mode-${snapshot.automation_mode}`}>
+          Automation {snapshot.automation_mode}
+        </span>
+      </section>
+
+      <section className="dashboard-card forecast-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Thirty-day runway</p>
+            <h2>Available cash vs expected position</h2>
+          </div>
+          {snapshot.forecast ? (
+            <div className="forecast-stat">
+              Buffer {aud(snapshot.forecast.risk_buffer_cents)}
+            </div>
+          ) : null}
+        </div>
+        <ForecastChart snapshot={snapshot} />
+        {snapshot.forecast ? (
+          <div className="forecast-summary">
+            <div>
+              <span>Cash-only low</span>
+              <strong>{aud(snapshot.forecast.cash_only.lowest_position_cents)}</strong>
+              <small>{shortDate(snapshot.forecast.cash_only.lowest_position_date)}</small>
+            </div>
+            <div>
+              <span>Cash-only close</span>
+              <strong>{aud(snapshot.forecast.cash_only.closing_position_cents)}</strong>
+              <small>Receivables excluded</small>
+            </div>
+            <div>
+              <span>Expected close</span>
+              <strong>{aud(snapshot.forecast.expected_with_receivables.closing_position_cents)}</strong>
+              <small>Expected receipts included</small>
+            </div>
+          </div>
+        ) : null}
+      </section>
+
+      <div className="detail-grid">
+        <section className="dashboard-card">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">What needs your attention</p>
-              <h2 id="pings-title">Runway pings</h2>
+              <p className="eyebrow">Bank setup</p>
+              <h2>Business accounts</h2>
             </div>
-            <span className={"state-pill state-" + forecast.state}>
-              {forecast.state}
-            </span>
           </div>
-
-          <div className="ping-feed" aria-live="polite">
-            {pings.map((ping, index) => (
-              <article
-                className={index === 0 ? "primary-ping" : "secondary-ping"}
-                key={ping.id}
-              >
-                <p className="ping-kicker">
-                  {index === 0 ? "This week’s call" : "Runway update"}
-                </p>
-                <p className="ping-copy">{ping.text}</p>
-                <p className="ping-action">{ping.consequence}</p>
-                <PingAction cta={ping.cta} />
-              </article>
-            ))}
-          </div>
-
-          <article className="check-in-card">
-            <div>
-              <p className="check-in-title">Weekly draw check-in</p>
-              <p>
-                Did {formatAud(analysis.weekly_draw.amount)} cover you this
-                week?
-              </p>
-            </div>
-            <div
-              className="choice-row"
-              aria-label="Planned weekly check-in choices"
-            >
-              <span>About right</span>
-              <span>Needed more</span>
-              <span>Had extra</span>
-            </div>
-          </article>
-
-          <aside className="scope-note">
-            <strong>Purposefully narrow:</strong> no bank feeds, household
-            budgets, email, calendar, investment data, or regulated advice.
-            Runway reasons from declared commitments and Pinch collection data.
-          </aside>
+          <BankControls
+            accounts={snapshot.accounts}
+            bankState={snapshot.bank_source.state}
+            initialJobIds={jobIds}
+            signedIn={Boolean(signedInEmail)}
+          />
+          {!hasSelectedAccounts && snapshot.accounts.length ? (
+            <p className="inline-alert">No accounts selected. Forecasting is paused.</p>
+          ) : null}
         </section>
 
-        <aside className="dashboard-panel" aria-labelledby="snapshot-title">
+        <section className="dashboard-card">
           <div className="section-heading">
             <div>
-              <p className="eyebrow">Backup view</p>
-              <h2 id="snapshot-title">Current snapshot</h2>
-            </div>
-            <span className="demo-pill">{sourceTag(view)}</span>
-          </div>
-
-          <div className="snapshot-state">
-            <span>Forecast state</span>
-            <strong className={"snapshot-state-" + forecast.state}>
-              {forecast.state}
-            </strong>
-          </div>
-
-          <div className="summary-row">
-            <div>
-              <span>Unpaid collections</span>
-              <strong>{formatAud(unpaidCollections)}</strong>
-            </div>
-            <div>
-              <span>Declared weekly draw</span>
-              <strong>{formatAud(analysis.weekly_draw.amount)}</strong>
-            </div>
-            <div>
-              <span>Expected coverage floor</span>
-              <strong>{formatAud(forecast.lowest_balance)}</strong>
+              <p className="eyebrow">Expense baseline</p>
+              <h2>Observed operating spend</h2>
             </div>
           </div>
-
-          <p className="coverage-caption">
-            Coverage floor means projected collections less declared commitments
-            in this seven-day window — not a bank balance.
-          </p>
-
-          <div className="ledger-section">
-            <h3>Unpaid payment records</h3>
-            <ul className="invoice-list">
-              {unpaidInvoices.map((invoice) => {
-                const payer = snapshot.payers.find(
-                  (item) => item.id === invoice.payer_id,
-                );
-                return (
-                  <li key={invoice.id}>
-                    <div>
-                      <strong>{payer?.name ?? "Unknown payer"}</strong>
-                      <span>Due {formatDate(invoice.due_date)}</span>
-                    </div>
-                    <div className="invoice-meta">
-                      <strong>{formatAud(invoice.amount)}</strong>
-                      <span
-                        className={
-                          "reliability-tag collection-pending"
-                        }
-                      >
-                        {invoiceStatusLabel(invoice)}
-                      </span>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          <div className="ledger-section">
-            <h3>Upcoming declared items</h3>
-            {analysis.in_window_lumpy_expenses.length ? (
-              <ul className="expense-list">
-                {analysis.in_window_lumpy_expenses.map((item) => (
-                  <li key={item.expense_id}>
-                    <span>{item.note}</span>
-                    <span>
-                      {formatAud(item.amount)} · {formatDate(item.date)}
-                    </span>
+          {snapshot.expense_profile ? (
+            <>
+              <div className="baseline-value">
+                <strong>{aud(snapshot.expense_profile.normal_daily_spend_cents, true)}</strong>
+                <span>normal daily spend · trailing {snapshot.expense_profile.lookback_days} days</span>
+              </div>
+              <ul className="compact-list">
+                {snapshot.expense_profile.recurring.map((item) => (
+                  <li key={item.merchant_key}>
+                    <div><strong>{item.label}</strong><span>{item.cadence} · {item.occurrences} observed</span></div>
+                    <strong>{aud(item.typical_amount_cents, true)}</strong>
                   </li>
                 ))}
+                {!snapshot.expense_profile.recurring.length ? (
+                  <li><span>No expense met the three-payment recurring threshold.</span></li>
+                ) : null}
               </ul>
-            ) : (
-              <p className="empty-copy">
-                Nothing extra declared inside the next seven days.
-              </p>
-            )}
-          </div>
-        </aside>
+              {snapshot.expense_profile.pending_debits.length ? (
+                <p className="pending-note">
+                  {snapshot.expense_profile.pending_debits.length} pending debit(s) are
+                  included in the immediate outlook and may change.
+                </p>
+              ) : null}
+              <ExpenseExclusions
+                patterns={snapshot.expense_exclusion_patterns}
+              />
+            </>
+          ) : (
+            <p className="empty-copy">Expense baseline appears after a selected-account sync.</p>
+          )}
+        </section>
       </div>
 
-      <section className="checkpoint-card" aria-labelledby="checkpoint-title">
-        <div>
-          <p className="eyebrow">Tomorrow’s non-negotiable</p>
-          <h2 id="checkpoint-title">The product only becomes live with Pinch proof.</h2>
+      <section className="dashboard-card receivables-section">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Demo receivables</p>
+            <h2>Invoice timing and aging</h2>
+          </div>
+          <span className="demo-pill">Not live Pinch data</span>
         </div>
-        <ol>
-          <li>Read real sandbox payers and collection payments.</li>
-          <li>Read payment methods and verified Payment statuses.</li>
-          <li>Create a real sandbox Payment Link and show its provider result.</li>
-        </ol>
+        <div className="aging-grid">
+          <div><span>Not due</span><strong>{aud(snapshot.receivables_aging.not_due_cents)}</strong></div>
+          <div><span>1–7 days</span><strong>{aud(snapshot.receivables_aging.overdue_1_7_cents)}</strong></div>
+          <div><span>8–30 days</span><strong>{aud(snapshot.receivables_aging.overdue_8_30_cents)}</strong></div>
+          <div><span>31+ days</span><strong>{aud(snapshot.receivables_aging.overdue_31_plus_cents)}</strong></div>
+        </div>
+        {unpaid.length ? (
+          <ul className="receivable-list">
+            {unpaid.map((item) => {
+              const uncertain = item.avg_days_late === null;
+              return (
+                <li key={item.id}>
+                  <div>
+                    <strong>{item.payer_name}</strong>
+                    <span>{item.id} · due {shortDate(item.due_date)}</span>
+                  </div>
+                  <div className="receivable-timing">
+                    <strong>{aud(item.amount_cents, true)}</strong>
+                    <span className={uncertain ? "timing-uncertain" : "timing-observed"}>
+                      {uncertain
+                        ? "Arrival uncertain — no payer history"
+                        : `Usually ${item.avg_days_late} day(s) late`}
+                    </span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="empty-copy">No unpaid receivables.</p>
+        )}
       </section>
+
+      <footer className="runway-footer">
+        Operational guidance only — not accounting, tax, credit, investment, or
+        personal financial advice. Raw bank transactions and account numbers are
+        not retained by Runway.
+      </footer>
     </main>
   );
 }

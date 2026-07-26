@@ -12,6 +12,7 @@
     "test": "npm run test:domain && npm run test:integration && npm run build && node --test tests/rendered-html.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate",
+    "types:worker": "wrangler types --include-runtime=false",
     "test:domain": "node --experimental-strip-types --test tests/*.test.ts",
     "test:integration": "vitest run",
     "check:pinch-sandbox": "node --env-file=.env.local --experimental-strip-types scripts/check-pinch-sandbox.ts",
