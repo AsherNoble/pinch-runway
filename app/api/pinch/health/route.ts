@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getChatGPTUser } from "@/app/chatgpt-auth";
 import { PinchSandboxClient } from "@/lib/pinch/client";
 import { getPinchReadiness, getPinchRuntimeConfig } from "@/lib/pinch/config";
 
@@ -7,8 +8,18 @@ export const dynamic = "force-dynamic";
 /**
  * A real, read-only sandbox probe. It is intentionally a health endpoint,
  * not a fixture fallback: non-live errors remain visibly non-live errors.
+ *
+ * Operator-only: the probe reveals backend connection state and provider
+ * wiring, so it must not be readable by anonymous callers.
  */
 export async function GET() {
+  if (!(await getChatGPTUser())) {
+    return NextResponse.json(
+      { error: "Operator authentication required." },
+      { status: 401, headers: { "cache-control": "no-store" } },
+    );
+  }
+
   const config = getPinchRuntimeConfig();
   const readiness = getPinchReadiness(config);
 
