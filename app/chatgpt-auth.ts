@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { isTrustedProxyRequest } from "@/lib/trusted-proxy";
 
 export type ChatGPTUser = {
   displayName: string;
@@ -16,10 +17,16 @@ const SIGN_IN_PATH = "/signin-with-chatgpt";
 const SIGN_OUT_PATH = "/signout-with-chatgpt";
 const CALLBACK_PATH = "/callback";
 
+// Cloudflare validates the real Host header against the TLS SNI, so it is the
+// one request signal a caller at the raw *.workers.dev origin cannot forge to
+// impersonate the ChatGPT proxy. See lib/trusted-proxy.ts.
+const RAW_HOST_HEADER = "host";
+
 export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const email = requestHeaders.get(USER_EMAIL_HEADER);
   if (!email) return null;
+  if (!isTrustedProxyRequest(requestHeaders.get(RAW_HOST_HEADER))) return null;
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
