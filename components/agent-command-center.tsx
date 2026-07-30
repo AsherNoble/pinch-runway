@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 
 export type AgentProvenance = "live" | "simulated" | "fallback";
 export type AgentPermissionMode = "blocked" | "ask" | "auto";
@@ -261,8 +261,18 @@ export function AgentCommandCenter({
     null,
   );
   const [message, setMessage] = useState("");
+  const [messageHovered, setMessageHovered] = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const router = useRouter();
+
+  // Auto-dismiss the status toast after a few seconds, unless the user is
+  // actively hovering it. Re-runs (and restarts the timer) whenever the
+  // message text or hover state changes.
+  useEffect(() => {
+    if (!message || messageHovered) return;
+    const timeout = setTimeout(() => setMessage(""), 6_000);
+    return () => clearTimeout(timeout);
+  }, [message, messageHovered]);
   const pendingApprovals = model.approvals.filter(
     (approval) => !resolvedApprovals.includes(approval.id),
   );
@@ -363,12 +373,14 @@ export function AgentCommandCenter({
           body.error ?? `Runway could not ${action} the demo scenario.`,
         );
       }
+      // The full agent narrative belongs in the Agent activity timeline, not
+      // this transient toast — refresh so the timeline picks up the new run.
       setMessage(
-        body.message ??
-          (action === "trigger"
-            ? "Scenario event received. The agent is working."
-            : "Scenario reset. You’re ready for another run."),
+        action === "trigger"
+          ? "Scenario event received. See Agent activity below for what Runway did."
+          : "Scenario reset. You’re ready for another run.",
       );
+      router.refresh();
     } catch (error) {
       setMessage(
         error instanceof Error
@@ -794,7 +806,12 @@ export function AgentCommandCenter({
       ) : null}
 
       {message ? (
-        <p className="agent-control-message" role="status">
+        <p
+          className="agent-control-message"
+          onMouseEnter={() => setMessageHovered(true)}
+          onMouseLeave={() => setMessageHovered(false)}
+          role="status"
+        >
           {message}
         </p>
       ) : null}

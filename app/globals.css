@@ -1584,6 +1584,11 @@ h3 {
   background: var(--forest);
   box-shadow: 0 12px 32px rgba(23, 38, 31, 0.2);
   font-size: 0.76rem;
+  transition: background-color 0.15s ease;
+}
+
+.agent-control-message:hover {
+  background: var(--forest-deep);
 }
 
 .agent-empty {
