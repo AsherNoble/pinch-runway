@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { pinchWebhookEvents } from "@/db/schema";
 import { POST } from "@/app/api/pinch/webhook/route";
@@ -64,6 +65,27 @@ describe("POST /api/pinch/webhook", () => {
     const rows = await db.select().from(pinchWebhookEvents);
     expect(rows).toHaveLength(1);
     expect(rows[0]?.eventId).toBe("evt-1");
+  });
+
+  it("deduplicates a concurrent replay without failing either delivery", async () => {
+    const body = { id: "evt-race", type: "payment.settled", data: { payment: { id: "pay-race", status: "settled" } } };
+
+    // Both deliveries can clear the existence check before either insert lands, so
+    // the primary key has to absorb the loser. If it throws instead, Pinch sees a
+    // 5xx and redelivers an event that was in fact already recorded.
+    const [a, b] = await Promise.all([
+      POST(await signedRequest(body)),
+      POST(await signedRequest(body)),
+    ]);
+
+    expect([a.status, b.status].sort()).toEqual([200, 202]);
+
+    // Scoped to this event id: the suite shares one ledger across tests.
+    const rows = await (await getDb())
+      .select()
+      .from(pinchWebhookEvents)
+      .where(eq(pinchWebhookEvents.eventId, "evt-race"));
+    expect(rows).toHaveLength(1);
   });
 
   it("records a dishonoured payment so the snapshot overlay flags it (A1 path)", async () => {

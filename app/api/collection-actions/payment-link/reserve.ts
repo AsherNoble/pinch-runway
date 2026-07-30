@@ -36,11 +36,23 @@ export async function reservePaymentLink(request: Request): Promise<Response> {
     }
     if (row?.state === "outcome_unknown") return NextResponse.json({ error: "The previous request outcome is unknown; it will not be retried automatically." }, { status: 409, headers });
     const staleReserving = !!row && row.state === "reserving" && now.getTime() - Date.parse(row.reservedAt) > RESERVATION_LEASE_MS;
+    const contended = () => NextResponse.json({ error: "Another request is reserving this invoice. Try again shortly." }, { status: 409, headers });
     if (!row || row.state === "failed_known" || staleReserving) {
-      if (row) await db.update(collectionActions).set({ state: "reserving", reservedAt: timestamp, errorCode: null, errorStatus: null }).where(eq(collectionActions.id, row.id));
+      if (row) {
+        // Claim by compare-and-swap. Reclaiming a failed_known or stale reserving
+        // row is a read-then-write, so two clicks can both pass the check above and
+        // each create a real payment link at Pinch. Only the caller that still sees
+        // the row as it was read may take it; the loser is contended, not a second
+        // link. The insert path below is guarded by the invoice/day unique index.
+        const claimed = await db.update(collectionActions)
+          .set({ state: "reserving", reservedAt: timestamp, errorCode: null, errorStatus: null })
+          .where(and(eq(collectionActions.id, row.id), eq(collectionActions.state, row.state), eq(collectionActions.reservedAt, row.reservedAt)))
+          .returning({ id: collectionActions.id });
+        if (claimed.length === 0) return contended();
+      }
       else {
         try { await db.insert(collectionActions).values({ invoiceId, actionDate: day, state: "reserving", createdAt: timestamp, reservedAt: timestamp }); }
-        catch { return NextResponse.json({ error: "Another request is reserving this invoice. Try again shortly." }, { status: 409, headers }); }
+        catch { return contended(); }
       }
     } else return NextResponse.json({ error: "A request is already being reserved for this invoice." }, { status: 409, headers });
     try {

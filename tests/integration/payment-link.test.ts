@@ -172,4 +172,45 @@ describe("reservePaymentLink", () => {
     const blocked = await reservePaymentLink(reserveRequest("INV1"));
     expect(blocked.status).toBe(409);
   });
+
+  // Reclaiming an existing row is a read-then-write, unlike the first click which
+  // the invoice/day unique index protects. Counting creations at the provider is
+  // the assertion that matters: a duplicate here is a real second payment link the
+  // ledger has no record of, and the payer could be sent either one.
+  for (const scenario of [
+    { name: "a failed_known row", seed: () => seedRow({ state: "failed_known" }) },
+    {
+      name: "a stale reserving row",
+      seed: () => {
+        const staleAt = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+        return seedRow({ state: "reserving", createdAt: staleAt, reservedAt: staleAt });
+      },
+    },
+  ]) {
+    it(`creates only one provider link when two clicks race to reclaim ${scenario.name}`, async () => {
+      await scenario.seed();
+      const created: string[] = [];
+      onCreatePaymentLink = async () => {
+        const id = `plink_${created.length + 1}`;
+        created.push(id);
+        // Provider latency is the window the two callers interleave in.
+        await new Promise((resolve) => setTimeout(resolve, 25));
+        return json(paymentLinkReply(id), 201);
+      };
+
+      const [a, b] = await Promise.all([
+        reservePaymentLink(reserveRequest("INV1")),
+        reservePaymentLink(reserveRequest("INV1")),
+      ]);
+
+      expect([a.status, b.status].sort()).toEqual([201, 409]);
+      expect(created).toHaveLength(1);
+
+      // The surviving row must point at the link that actually exists at Pinch.
+      const rows = await (await getDb()).select().from(collectionActions);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]?.state).toBe("link_created");
+      expect(rows[0]?.pinchLinkId).toBe(created[0]);
+    });
+  }
 });

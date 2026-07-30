@@ -15,8 +15,16 @@ export async function POST(request: Request) {
   const data = object(body.data) ?? body; const payment = object(data.payment) ?? data;
   if (!eventId) return NextResponse.json({ error: "Webhook event ID is required." }, { status: 400 });
   const db = await getDb();
-  if ((await db.select().from(pinchWebhookEvents).where(eq(pinchWebhookEvents.eventId, eventId)).limit(1))[0]) return NextResponse.json({ duplicate: true }, { headers: { "cache-control": "no-store" } });
-  await db.insert(pinchWebhookEvents).values({ eventId, receivedAt: new Date().toISOString(), eventType, paymentId: text(payment.id) ?? null, status: text(payment.status) ?? null });
+  const duplicate = () => NextResponse.json({ duplicate: true }, { headers: { "cache-control": "no-store" } });
+  if ((await db.select().from(pinchWebhookEvents).where(eq(pinchWebhookEvents.eventId, eventId)).limit(1))[0]) return duplicate();
+  // A concurrent replay of the same event can clear the check above before either
+  // insert lands, so the primary key is the real dedupe guard. Without this the
+  // loser throws, Pinch sees a 5xx, and the provider retries what we already have.
+  const inserted = await db.insert(pinchWebhookEvents)
+    .values({ eventId, receivedAt: new Date().toISOString(), eventType, paymentId: text(payment.id) ?? null, status: text(payment.status) ?? null })
+    .onConflictDoNothing()
+    .returning({ eventId: pinchWebhookEvents.eventId });
+  if (inserted.length === 0) return duplicate();
   return NextResponse.json({ accepted: true }, { status: 202, headers: { "cache-control": "no-store" } });
 }
 function text(value: unknown) { return typeof value === "string" && value ? value : undefined; }
