@@ -1028,6 +1028,7 @@ async function createOrReuseDemoPaymentLink(
       content: {
         invoice_id: DEMO_INVOICE_ID,
         provider_link_id: link.id,
+        payment_link_url: link.url,
         amount_cents: link.amount,
         reused: true,
         payment_link_ready: true,
@@ -1081,6 +1082,7 @@ async function createOrReuseDemoPaymentLink(
       content: {
         invoice_id: DEMO_INVOICE_ID,
         provider_link_id: link.id,
+        payment_link_url: link.url,
         amount_cents: link.amount,
         reused: false,
         payment_link_ready: true,

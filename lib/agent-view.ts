@@ -168,7 +168,7 @@ function buildActivity(
             ? "Hourly heartbeat checked"
           : "Owner asked Runway",
       detail:
-        run.summary ??
+        stripMarkdownEmphasis(run.summary) ??
         "Runway is checking the financial evidence and permitted playbooks.",
       occurredAt: run.startedAt,
       state:
@@ -197,6 +197,7 @@ function buildActivity(
               ? "completed"
               : "queued",
       provenance: call.provenance,
+      paymentLinkUrl: paymentLinkUrlFromToolResult(call.toolName, call.result),
     });
   }
   return activity.reverse();
@@ -294,6 +295,21 @@ function toolDetail(
         ? "This step used the clearly seeded demo adapter."
         : "The live step was unavailable, so audited fallback data was used.";
   return `${name.replaceAll("_", " ")} · ${status.replaceAll("_", " ")}. ${source}`;
+}
+
+function paymentLinkUrlFromToolResult(
+  toolName: string,
+  result: unknown,
+): string | null {
+  if (toolName !== "create_pinch_payment_link") return null;
+  if (!result || typeof result !== "object") return null;
+  const url = (result as Record<string, unknown>).payment_link_url;
+  return typeof url === "string" ? url : null;
+}
+
+function stripMarkdownEmphasis(value: string | null | undefined): string | null {
+  if (!value) return value ?? null;
+  return value.replaceAll(/\*\*(.+?)\*\*/g, "$1");
 }
 
 function aud(cents: number): string {

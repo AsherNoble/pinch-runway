@@ -45,6 +45,7 @@ export interface AgentCommandCenterViewModel {
     occurredAt: string;
     state: "queued" | "running" | "completed" | "failed" | "needs_approval";
     provenance: AgentProvenance;
+    paymentLinkUrl?: string | null;
   }[];
   sources: readonly {
     name: AgentSourceName;
@@ -260,6 +261,7 @@ export function AgentCommandCenter({
     null,
   );
   const [message, setMessage] = useState("");
+  const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   const router = useRouter();
   const pendingApprovals = model.approvals.filter(
     (approval) => !resolvedApprovals.includes(approval.id),
@@ -413,6 +415,29 @@ export function AgentCommandCenter({
     }
   }
 
+  async function copyPaymentLink(id: string, url: string) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+      } else {
+        throw new Error("Clipboard API unavailable");
+      }
+    } catch {
+      // Some browser contexts (older Safari, non-HTTPS, denied permission)
+      // don't expose navigator.clipboard. Fall back to a hidden textarea.
+      const textarea = document.createElement("textarea");
+      textarea.value = url;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.append(textarea);
+      textarea.select();
+      document.execCommand("copy");
+      textarea.remove();
+    }
+    setCopiedLinkId(id);
+    setTimeout(() => setCopiedLinkId((current) => (current === id ? null : current)), 1600);
+  }
+
   const risk = model.risk;
   return (
     <main className="agent-command-center">
@@ -502,6 +527,32 @@ export function AgentCommandCenter({
                       <ProvenanceBadge value={item.provenance} />
                     </div>
                     <p>{item.detail}</p>
+                    {item.paymentLinkUrl ? (
+                      <div className="agent-event-link">
+                        <span className="agent-event-link-url">
+                          {item.paymentLinkUrl}
+                        </span>
+                        <div className="agent-event-link-actions">
+                          <a
+                            className="agent-link-btn agent-link-btn-primary"
+                            href={item.paymentLinkUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            Open link
+                          </a>
+                          <button
+                            className="agent-link-btn agent-link-btn-ghost"
+                            onClick={() =>
+                              void copyPaymentLink(item.id, item.paymentLinkUrl!)
+                            }
+                            type="button"
+                          >
+                            {copiedLinkId === item.id ? "Copied" : "Copy"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
                     <time dateTime={item.occurredAt}>
                       {dateLabel(item.occurredAt, true)} ·{" "}
                       {item.state.replaceAll("_", " ")}

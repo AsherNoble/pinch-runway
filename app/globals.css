@@ -1138,6 +1138,73 @@ h3 {
   line-height: 1.45;
 }
 
+.agent-event-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 9px;
+}
+
+.agent-event-link-url {
+  flex: 1 1 200px;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 9px;
+  color: #2c3a32;
+  background: var(--paper);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.71rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-event-link-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 6px;
+}
+
+.agent-link-btn {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.68rem;
+  font-weight: 720;
+  letter-spacing: 0.01em;
+}
+
+.agent-link-btn-primary {
+  color: #f8f6ed;
+  background: var(--forest);
+}
+
+.agent-link-btn-primary:hover {
+  background: var(--forest-deep);
+}
+
+.agent-link-btn-ghost {
+  border-color: var(--line);
+  color: var(--ink);
+  background: #fff;
+}
+
+.agent-link-btn-ghost:hover {
+  background: var(--paper);
+}
+
+.agent-link-btn:focus-visible {
+  outline: 3px solid rgba(22, 78, 59, 0.26);
+  outline-offset: 2px;
+}
+
 .agent-event time,
 .agent-source-card small {
   color: #7c8781;
