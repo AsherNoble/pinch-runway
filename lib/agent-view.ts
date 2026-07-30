@@ -7,6 +7,7 @@ import { getTwilioWhatsAppReadiness } from "@/lib/agent-integrations";
 import type { loadAgentCommandState } from "@/lib/agent-store";
 import { getPinchReadiness } from "@/lib/pinch/config";
 import type { RunwaySnapshot } from "@/lib/runway-contracts";
+import { stripMarkdownEmphasis } from "@/lib/text-format";
 
 type StoredCommandState = Awaited<ReturnType<typeof loadAgentCommandState>>;
 
@@ -305,11 +306,6 @@ function paymentLinkUrlFromToolResult(
   if (!result || typeof result !== "object") return null;
   const url = (result as Record<string, unknown>).payment_link_url;
   return typeof url === "string" ? url : null;
-}
-
-function stripMarkdownEmphasis(value: string | null | undefined): string | null {
-  if (!value) return value ?? null;
-  return value.replaceAll(/\*\*(.+?)\*\*/g, "$1");
 }
 
 function aud(cents: number): string {

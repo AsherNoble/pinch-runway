@@ -54,6 +54,7 @@ import { sydneyDate } from "@/lib/date-utils";
 import { PinchSandboxClient } from "@/lib/pinch/client";
 import { getPinchRuntimeConfig } from "@/lib/pinch/config";
 import { loadRunwaySnapshot } from "@/lib/runway-store";
+import { stripMarkdownEmphasis } from "@/lib/text-format";
 
 const DEMO_OPENING_CASH_CENTS = 2_640_000;
 const DEMO_DAILY_SPEND_CENTS = 20_000;
@@ -271,9 +272,10 @@ export async function runProactiveDemoAgent(
       message = await runDeterministicDemoFallback(context, now);
     }
 
-    const finalMessage =
+    const finalMessage = stripMarkdownEmphasis(
       message ||
-      "That supplier bill puts your buffer under pressure. I followed up the ranked overdue invoice and logged the evidence.";
+        "That supplier bill puts your buffer under pressure. I followed up the ranked overdue invoice and logged the evidence.",
+    );
     if (!context.ownerNotificationSent) {
       await notifyOwner(finalMessage, context);
     }
@@ -379,6 +381,7 @@ export async function runHourlyHeartbeatAgent(
       logModelFallback({ runId, triggerType: "heartbeat", error });
       message = deterministicHeartbeatSummary(context);
     }
+    message = stripMarkdownEmphasis(message);
 
     await completeAgentRun({
       id: runId,
@@ -481,8 +484,9 @@ export async function runWhatsAppAgentTurn(input: {
       });
       answer = await groundedFallbackAnswer(input.body, context, now);
     }
-    const finalMessage =
-      answer || "I could not find enough evidence to answer that safely.";
+    const finalMessage = stripMarkdownEmphasis(
+      answer || "I could not find enough evidence to answer that safely.",
+    );
     await notifyOwner(finalMessage, context);
     await completeAgentRun({
       id: runId,
