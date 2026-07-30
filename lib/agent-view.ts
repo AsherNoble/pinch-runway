@@ -2,9 +2,12 @@ import type {
   AgentCommandCenterViewModel,
   AgentProvenance,
 } from "@/components/agent-command-center";
-import type { AgentForecastResult } from "@/lib/agent";
 import { getTwilioWhatsAppReadiness } from "@/lib/agent-integrations";
 import type { loadAgentCommandState } from "@/lib/agent-store";
+import {
+  DEMO_RISK_BUFFER_CENTS,
+  type RuntimeFinancialContext,
+} from "@/lib/agent-runtime";
 import { getPinchReadiness } from "@/lib/pinch/config";
 import type { RunwaySnapshot } from "@/lib/runway-contracts";
 import { stripMarkdownEmphasis } from "@/lib/text-format";
@@ -14,12 +17,18 @@ type StoredCommandState = Awaited<ReturnType<typeof loadAgentCommandState>>;
 export function buildAgentCommandCenterModel(input: {
   snapshot: RunwaySnapshot;
   commandState: StoredCommandState | null;
+  // Computed fresh on every page load (see app/page.tsx) - the risk card
+  // and chart read from this, never from a persisted run's forecast, so
+  // they can't go stale relative to the current buffer setting the way
+  // run.forecast did.
+  liveForecast: RuntimeFinancialContext | null;
   now?: Date;
 }): AgentCommandCenterViewModel {
   const now = input.now ?? new Date();
   const run = input.commandState?.latestRun ?? null;
-  const forecast = isAgentForecast(run?.forecast) ? run.forecast : null;
-  const provenance = (run?.provenance ?? "simulated") as AgentProvenance;
+  const forecast = input.liveForecast?.forecast ?? null;
+  const provenance = (input.liveForecast?.bank_provenance ??
+    "simulated") as AgentProvenance;
   const materialRisk = forecast?.material_risk_date !== null && forecast != null;
   const target = forecast?.ranked_collection_targets[0];
   const actionCompleted = run?.status === "completed";
@@ -43,7 +52,19 @@ export function buildAgentCommandCenterModel(input: {
         : "Runway is watching connected cash, collections and finance-relevant commitments. Inject the demo bill to run the golden path.",
       riskDate: forecast?.material_risk_date ?? null,
       projectedLowCents: forecast?.cash_only.low_cents ?? null,
+      projectedLowDate: forecast?.cash_only.low_date ?? null,
       repairAmountCents: forecast?.repair_amount_cents ?? null,
+      // The buffer that actually produced repairAmountCents - this is the
+      // buffer active when this run last executed, which can differ from
+      // the live model.forecast.bufferCents if the setting changed since.
+      repairBufferCents: forecast?.risk_buffer_cents ?? null,
+      // cashAtRisk isn't exposed by AgentForecastResult directly, but since
+      // repairAmount = max(0, buffer - cashAtRisk), it's exactly recoverable
+      // by reversing the formula whenever there was a real gap to repair.
+      cashAtRiskCents:
+        forecast && forecast.repair_amount_cents > 0
+          ? forecast.risk_buffer_cents - forecast.repair_amount_cents
+          : null,
       actionLabel: materialRisk
         ? actionCompleted
           ? "Collection follow-up completed and receipt logged"
@@ -59,10 +80,18 @@ export function buildAgentCommandCenterModel(input: {
       provenance,
     },
     forecast: {
-      bufferCents:
-        forecast?.risk_buffer_cents ??
-        input.snapshot.forecast?.risk_buffer_cents ??
-        0,
+      // forecast comes from liveForecast, computed fresh this request and
+      // already override-aware (loadRuntimeFinancialContext applies the
+      // manual buffer setting itself), so this can't go stale the way
+      // reading through a persisted run's forecast could.
+      bufferCents: forecast?.risk_buffer_cents ?? DEMO_RISK_BUFFER_CENTS,
+      bufferMode: input.commandState?.riskBuffer.mode ?? "auto",
+      // Auto mode is always exactly 7 x daily spend, so this recovers the
+      // per-day figure for the explainer without threading a new field
+      // through every forecast-building call site.
+      bufferDailySpendCents: Math.round(
+        (forecast?.risk_buffer_cents ?? DEMO_RISK_BUFFER_CENTS) / 7,
+      ),
       weeks:
         forecast?.weeks.map((week) => ({
           id: `week-${week.week}`,
@@ -248,15 +277,6 @@ function permissionRows(
       mode: permissions.receipt_request,
     },
   ];
-}
-
-function isAgentForecast(value: unknown): value is AgentForecastResult {
-  return Boolean(
-    value &&
-      typeof value === "object" &&
-      Array.isArray((value as AgentForecastResult).weeks) &&
-      typeof (value as AgentForecastResult).risk_buffer_cents === "number",
-  );
 }
 
 function bankStatus(

@@ -246,6 +246,18 @@ export const agentHeartbeatSettings = sqliteTable("agent_heartbeat_settings", {
   updatedAt: text("updated_at").notNull(),
 });
 
+/**
+ * Single-row owner override for the operating buffer. `manualCents` is only
+ * meaningful when mode is "manual" - the auto formula (7 days of normal
+ * daily spend) is recomputed live and never persisted here.
+ */
+export const riskBufferSettings = sqliteTable("risk_buffer_settings", {
+  id: integer("id").primaryKey(),
+  mode: text("mode", { enum: ["auto", "manual"] }).notNull(),
+  manualCents: integer("manual_cents"),
+  updatedAt: text("updated_at").notNull(),
+});
+
 export const agentHeartbeatExecutions = sqliteTable(
   "agent_heartbeat_executions",
   {

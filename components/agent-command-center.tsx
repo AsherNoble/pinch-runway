@@ -1,7 +1,16 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type RefObject,
+} from "react";
+import { createPortal } from "react-dom";
 
 export type AgentProvenance = "live" | "simulated" | "fallback";
 export type AgentPermissionMode = "blocked" | "ask" | "auto";
@@ -23,13 +32,18 @@ export interface AgentCommandCenterViewModel {
     summary: string;
     riskDate: string | null;
     projectedLowCents: number | null;
+    projectedLowDate: string | null;
     repairAmountCents: number | null;
+    repairBufferCents: number | null;
+    cashAtRiskCents: number | null;
     actionLabel: string;
     actionState: "recommended" | "in_progress" | "completed" | "paused";
     provenance: AgentProvenance;
   };
   forecast: {
     bufferCents: number;
+    bufferMode: "auto" | "manual";
+    bufferDailySpendCents: number;
     weeks: readonly {
       id: string;
       label: string;
@@ -90,6 +104,7 @@ export interface AgentCommandCenterEndpoints {
   heartbeat?: string;
   trigger?: string;
   reset?: string;
+  riskBuffer?: string;
 }
 
 export interface AgentCommandCenterProps {
@@ -240,6 +255,333 @@ function Forecast({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Positions a portalled popover against an anchor element using fixed
+ * viewport coordinates, clamped to stay on-screen. Portalling to <body> is
+ * what actually matters here - ancestors like .agent-risk-card use
+ * overflow: hidden for their rounded-corner color bar, which silently clips
+ * any absolutely-positioned popover nested inside it.
+ */
+function usePopoverPosition(
+  open: boolean,
+  anchorRef: RefObject<HTMLElement | null>,
+  align: "left" | "right",
+) {
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(
+    null,
+  );
+  const popRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+    function reposition() {
+      const anchor = anchorRef.current;
+      const pop = popRef.current;
+      if (!anchor || !pop) return;
+      const anchorRect = anchor.getBoundingClientRect();
+      const popRect = pop.getBoundingClientRect();
+      const margin = 12;
+      let left =
+        align === "right"
+          ? anchorRect.right - popRect.width
+          : anchorRect.left;
+      left = Math.min(left, window.innerWidth - popRect.width - margin);
+      left = Math.max(left, margin);
+      let top = anchorRect.top - popRect.height - 10;
+      if (top < margin) top = anchorRect.bottom + 10;
+      setCoords({ top, left });
+    }
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    // The buffer popover's height changes when its edit panel expands, so
+    // watch for that instead of threading extra dependencies through here.
+    const observer = new ResizeObserver(reposition);
+    if (popRef.current) observer.observe(popRef.current);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+      observer.disconnect();
+    };
+  }, [open, anchorRef, align]);
+
+  return { popRef, coords };
+}
+
+function InfoPopover({
+  label,
+  title,
+  children,
+}: {
+  label: string;
+  title: string;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const { popRef, coords } = usePopoverPosition(open, triggerRef, "left");
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !popRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open, popRef]);
+
+  return (
+    <span className="agent-stat-control">
+      <button
+        aria-expanded={open}
+        aria-label={`Explain ${label}`}
+        className="agent-stat-info-trigger"
+        onClick={() => setOpen((current) => !current)}
+        ref={triggerRef}
+        type="button"
+      >
+        ?
+      </button>
+      {open
+        ? createPortal(
+            <div
+              className="agent-stat-pop"
+              ref={popRef}
+              role="note"
+              style={{
+                top: coords?.top ?? 0,
+                left: coords?.left ?? 0,
+                visibility: coords ? "visible" : "hidden",
+              }}
+            >
+              <strong className="agent-stat-pop-title">{title}</strong>
+              {children}
+            </div>,
+            document.body,
+          )
+        : null}
+    </span>
+  );
+}
+
+function BufferControl({
+  bufferCents,
+  bufferMode,
+  dailySpendCents,
+  endpoint,
+  onMessage,
+  onSaved,
+}: {
+  bufferCents: number;
+  bufferMode: "auto" | "manual";
+  dailySpendCents: number;
+  endpoint?: string;
+  onMessage: (message: string) => void;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [manualInput, setManualInput] = useState(
+    String(Math.round(bufferCents / 100)),
+  );
+  const [saving, setSaving] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const { popRef, coords } = usePopoverPosition(open, triggerRef, "right");
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !popRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open, popRef]);
+
+  async function saveMode(
+    value: { mode: "auto" } | { mode: "manual"; manualCents: number },
+  ) {
+    if (!endpoint) return;
+    setSaving(true);
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(value),
+      });
+      const body = (await response.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      if (!response.ok) {
+        throw new Error(body.error ?? "Runway could not update the buffer.");
+      }
+      onMessage(
+        value.mode === "manual"
+          ? "Custom buffer saved."
+          : "Buffer reset to automatic.",
+      );
+      setOpen(false);
+      onSaved();
+    } catch (error) {
+      onMessage(
+        error instanceof Error
+          ? error.message
+          : "Runway could not update the buffer.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function submitManualBuffer() {
+    const dollars = Number(manualInput.replaceAll(",", "").trim());
+    if (!Number.isFinite(dollars) || dollars <= 0) {
+      onMessage("Enter a buffer amount greater than zero.");
+      return;
+    }
+    void saveMode({ mode: "manual", manualCents: Math.round(dollars * 100) });
+  }
+
+  const popover = (
+    <div
+      className="agent-buffer-pop"
+      ref={popRef}
+      style={{
+        top: coords?.top ?? 0,
+        left: coords?.left ?? 0,
+        visibility: coords ? "visible" : "hidden",
+      }}
+    >
+      <div className="agent-buffer-pop-head">
+        <strong>Why {aud(bufferCents)}?</strong>
+        <span
+          className={`agent-provenance agent-provenance-${
+            bufferMode === "manual" ? "simulated" : "live"
+          }`}
+        >
+          {bufferMode === "manual" ? "manual" : "auto"}
+        </span>
+      </div>
+
+      {bufferMode === "manual" ? (
+        <p className="agent-buffer-note">
+          You've set a fixed buffer. Runway uses this amount instead of the
+          7-day formula until you reset it.
+        </p>
+      ) : (
+        <>
+          <div className="agent-buffer-formula">
+            <div className="agent-buffer-formula-row">
+              <span>Normal daily spend</span>
+              <span>{aud(dailySpendCents)} / day</span>
+            </div>
+            <div className="agent-buffer-formula-row">
+              <span>Buffer window</span>
+              <span>× 7 days</span>
+            </div>
+            <div className="agent-buffer-formula-row agent-buffer-formula-total">
+              <span>Buffer</span>
+              <span>{aud(bufferCents)}</span>
+            </div>
+          </div>
+          <p className="agent-buffer-note">
+            Computed from seven days of your normal daily spend (variable
+            and recurring expenses).
+          </p>
+        </>
+      )}
+
+      {endpoint ? (
+        <>
+          <button
+            aria-expanded={editOpen}
+            className="agent-buffer-edit-toggle"
+            onClick={() => setEditOpen((current) => !current)}
+            type="button"
+          >
+            {editOpen
+              ? "Hide custom buffer ↑"
+              : "Set a custom buffer instead →"}
+          </button>
+
+          {editOpen ? (
+            <div className="agent-buffer-edit-panel">
+              <p className="agent-buffer-edit-note">
+                Overriding replaces the 7-day formula with a fixed number.
+                Runway keeps using it — even after a bank connects — until
+                you reset it.
+              </p>
+              <label htmlFor="agent-buffer-input">Custom buffer (AUD)</label>
+              <div className="agent-buffer-edit-row">
+                <input
+                  id="agent-buffer-input"
+                  inputMode="numeric"
+                  onChange={(event) => setManualInput(event.target.value)}
+                  type="text"
+                  value={manualInput}
+                />
+                <button
+                  className="agent-buffer-save"
+                  disabled={saving}
+                  onClick={submitManualBuffer}
+                  type="button"
+                >
+                  {saving ? "Saving…" : "Save"}
+                </button>
+              </div>
+              {bufferMode === "manual" ? (
+                <button
+                  className="agent-buffer-reset"
+                  disabled={saving}
+                  onClick={() => void saveMode({ mode: "auto" })}
+                  type="button"
+                >
+                  Reset to automatic (7× daily spend)
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <span className="agent-unavailable">Controls not connected</span>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="agent-buffer-control">
+      <button
+        aria-expanded={open}
+        className="agent-buffer-value"
+        onClick={() => setOpen((current) => !current)}
+        ref={triggerRef}
+        type="button"
+      >
+        {aud(bufferCents)} buffer
+        <span aria-hidden="true" className="agent-buffer-info-dot">
+          ?
+        </span>
+      </button>
+
+      {open ? createPortal(popover, document.body) : null}
     </div>
   );
 }
@@ -503,15 +845,95 @@ export function AgentCommandCenter({
         </div>
         <dl className="agent-risk-stats">
           <div>
-            <dt>Pressure date</dt>
+            <dt>
+              Pressure date
+              <InfoPopover label="pressure date" title="What is the pressure date?">
+                <p className="agent-stat-note">
+                  The first day your <strong>cash-only</strong> balance —
+                  money you&rsquo;re certain to have, not counting invoices
+                  you&rsquo;re still waiting on — is projected to drop below
+                  your buffer
+                  {risk.repairBufferCents !== null
+                    ? ` (${aud(risk.repairBufferCents)} at the time of this check)`
+                    : ""}
+                  .
+                </p>
+                {risk.repairBufferCents !== null &&
+                risk.repairBufferCents !== model.forecast.bufferCents ? (
+                  <p className="agent-stat-warning">
+                    Your buffer has since changed to{" "}
+                    {aud(model.forecast.bufferCents)}. Trigger a new check to
+                    refresh this date.
+                  </p>
+                ) : null}
+              </InfoPopover>
+            </dt>
             <dd>{dateLabel(risk.riskDate)}</dd>
           </div>
           <div>
-            <dt>Projected low</dt>
+            <dt>
+              Projected low
+              <InfoPopover label="projected low" title="What is the projected low?">
+                <p className="agent-stat-note">
+                  The single lowest point your cash-only balance is expected
+                  to reach across the full 13-week forecast
+                  {risk.projectedLowDate
+                    ? ` (around ${dateLabel(risk.projectedLowDate)})`
+                    : ""}
+                  . This isn&rsquo;t necessarily the pressure date above —
+                  cash can keep falling after the buffer is first breached.
+                </p>
+              </InfoPopover>
+            </dt>
             <dd>{aud(risk.projectedLowCents)}</dd>
           </div>
           <div>
-            <dt>Gap to repair</dt>
+            <dt>
+              Gap to repair
+              <InfoPopover label="gap to repair" title="How is this calculated?">
+                {risk.cashAtRiskCents !== null &&
+                risk.repairBufferCents !== null ? (
+                  <>
+                    <p className="agent-stat-note">
+                      The shortfall between your buffer and the cash-only
+                      balance on the pressure date — how far under buffer
+                      you&rsquo;re projected to be the moment it&rsquo;s
+                      first breached.
+                    </p>
+                    <div className="agent-stat-formula">
+                      <div className="agent-stat-formula-row">
+                        <span>Buffer</span>
+                        <span>{aud(risk.repairBufferCents)}</span>
+                      </div>
+                      <div className="agent-stat-formula-row">
+                        <span>Cash-only on {dateLabel(risk.riskDate)}</span>
+                        <span>− {aud(risk.cashAtRiskCents)}</span>
+                      </div>
+                      <div className="agent-stat-formula-row agent-stat-formula-total">
+                        <span>Gap to repair</span>
+                        <span>{aud(risk.repairAmountCents)}</span>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <p className="agent-stat-note">
+                    The shortfall between your buffer and the cash-only
+                    balance on the pressure date, once cash is projected to
+                    breach it. No breach is currently projected, so there is
+                    nothing to repair.
+                  </p>
+                )}
+                {risk.repairBufferCents !== null &&
+                risk.repairBufferCents !== model.forecast.bufferCents ? (
+                  <p className="agent-stat-warning">
+                    Computed with a {aud(risk.repairBufferCents)} buffer
+                    active at the time — your current buffer is{" "}
+                    {aud(model.forecast.bufferCents)}. Trigger a new check to
+                    refresh this figure.
+                  </p>
+                ) : null}
+              </InfoPopover>
+            </dt>
             <dd>{aud(risk.repairAmountCents)}</dd>
           </div>
         </dl>
@@ -524,9 +946,14 @@ export function AgentCommandCenter({
               <p className="eyebrow">Thirteen-week outlook</p>
               <h2>How the next quarter looks</h2>
             </div>
-            <span className="agent-buffer-value">
-              {aud(model.forecast.bufferCents)} buffer
-            </span>
+            <BufferControl
+              bufferCents={model.forecast.bufferCents}
+              bufferMode={model.forecast.bufferMode}
+              dailySpendCents={model.forecast.bufferDailySpendCents}
+              endpoint={endpoints.riskBuffer}
+              onMessage={setMessage}
+              onSaved={() => router.refresh()}
+            />
           </div>
           <Forecast forecast={model.forecast} />
         </section>

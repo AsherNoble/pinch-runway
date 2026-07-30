@@ -39,6 +39,7 @@ import {
   enqueueAgentApproval,
   loadAgentCommandState,
   loadAgentPermissions,
+  loadRiskBufferSetting,
   loadSimulatedCalendarEdits,
   recentAgentMessages,
   recordAgentMessage,
@@ -58,7 +59,7 @@ import { stripMarkdownEmphasis } from "@/lib/text-format";
 
 const DEMO_OPENING_CASH_CENTS = 2_640_000;
 const DEMO_DAILY_SPEND_CENTS = 20_000;
-const DEMO_RISK_BUFFER_CENTS = 700_000;
+export const DEMO_RISK_BUFFER_CENTS = 700_000;
 const DEMO_INVOICE_ID = SEEDED_BUSINESS_PROFILE.overdue_invoice_id;
 const WHATSAPP_AGENT_SYSTEM_PROMPT = `${RUNWAY_AGENT_SYSTEM_PROMPT}
 
@@ -188,7 +189,7 @@ const WHATSAPP_AGENT_TOOLS = RUNWAY_AGENT_TOOLS.filter(
   (tool) => tool.name !== "send_owner_whatsapp",
 );
 
-interface RuntimeFinancialContext {
+export interface RuntimeFinancialContext {
   forecast: AgentForecastResult;
   bank_provenance: Provenance;
   bank_state: string;
@@ -899,7 +900,7 @@ async function executePermittedTool(
   }
 }
 
-async function loadRuntimeFinancialContext(
+export async function loadRuntimeFinancialContext(
   now: Date,
 ): Promise<RuntimeFinancialContext> {
   let snapshot;
@@ -923,16 +924,22 @@ async function loadRuntimeFinancialContext(
     ? expenseProfile!.variable_daily_average_cents
     : DEMO_DAILY_SPEND_CENTS;
   const today = sydneyDate(now);
+  const riskBufferSetting = await loadRiskBufferSetting();
+  const manualBufferCents =
+    riskBufferSetting.mode === "manual"
+      ? (riskBufferSetting.manualCents ?? null)
+      : null;
+  const autoBufferCents = liveSnapshot
+    ? Math.max(
+        liveSnapshot.forecast?.risk_buffer_cents ?? 0,
+        expenseProfile!.normal_daily_spend_cents * 7,
+      )
+    : DEMO_RISK_BUFFER_CENTS;
   const baseInput: AgentForecastInput = {
     today,
     opening_cash_cents: openingCash,
     daily_variable_spend_cents: Math.max(1, dailySpend),
-    risk_buffer_cents: liveSnapshot
-      ? Math.max(
-          liveSnapshot.forecast?.risk_buffer_cents ?? 0,
-          expenseProfile!.normal_daily_spend_cents * 7,
-        )
-      : DEMO_RISK_BUFFER_CENTS,
+    risk_buffer_cents: manualBufferCents ?? autoBufferCents,
     recurring_outflows: liveSnapshot
       ? expenseProfile!.recurring.flatMap((item) => {
           const next = item.projected_dates.find((date) => date >= today);
@@ -994,7 +1001,7 @@ async function loadRuntimeFinancialContext(
       ...baseInput,
       opening_cash_cents: DEMO_OPENING_CASH_CENTS,
       daily_variable_spend_cents: DEMO_DAILY_SPEND_CENTS,
-      risk_buffer_cents: DEMO_RISK_BUFFER_CENTS,
+      risk_buffer_cents: manualBufferCents ?? DEMO_RISK_BUFFER_CENTS,
     });
     bankProvenance = "fallback";
     warning =

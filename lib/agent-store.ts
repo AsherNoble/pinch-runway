@@ -9,6 +9,7 @@ import {
   agentRuns,
   agentToolCalls,
   demoAgentState,
+  riskBufferSettings,
   simulatedCalendarEdits,
   simulatedOutbox,
 } from "@/db/schema";
@@ -33,6 +34,7 @@ export type AgentHeartbeatExecutionStatus =
   | "completed"
   | "failed"
   | "skipped";
+export type RiskBufferMode = "auto" | "manual";
 
 const AGENT_HEARTBEAT_SETTINGS_ID = 1;
 
@@ -97,6 +99,43 @@ export async function loadAgentHeartbeatSettings() {
     updatedAt: settings?.updatedAt ?? null,
     latestExecution: latestExecution ?? null,
   };
+}
+
+const RISK_BUFFER_SETTINGS_ID = 1;
+
+export async function loadRiskBufferSetting(): Promise<{
+  mode: RiskBufferMode;
+  manualCents: number | null;
+}> {
+  const db = await getDb();
+  const [row] = await db
+    .select()
+    .from(riskBufferSettings)
+    .where(eq(riskBufferSettings.id, RISK_BUFFER_SETTINGS_ID))
+    .limit(1);
+  return { mode: row?.mode ?? "auto", manualCents: row?.manualCents ?? null };
+}
+
+export async function setRiskBufferSetting(
+  input: { mode: "auto" } | { mode: "manual"; manualCents: number },
+): Promise<void> {
+  const db = await getDb();
+  await db
+    .insert(riskBufferSettings)
+    .values({
+      id: RISK_BUFFER_SETTINGS_ID,
+      mode: input.mode,
+      manualCents: input.mode === "manual" ? input.manualCents : null,
+      updatedAt: new Date().toISOString(),
+    })
+    .onConflictDoUpdate({
+      target: riskBufferSettings.id,
+      set: {
+        mode: input.mode,
+        manualCents: input.mode === "manual" ? input.manualCents : null,
+        updatedAt: new Date().toISOString(),
+      },
+    });
 }
 
 export async function setAgentHeartbeatEnabled(enabled: boolean): Promise<void> {
@@ -559,6 +598,7 @@ export async function loadAgentCommandState() {
     messages: await recentAgentMessages(),
     outbox,
     heartbeat,
+    riskBuffer: await loadRiskBufferSetting(),
     demoState: demoState ?? {
       id: 1,
       scenarioState: "ready" as const,

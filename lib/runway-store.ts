@@ -8,6 +8,7 @@ import {
   reminderDecisions,
   runwayProfiles,
 } from "@/db/schema";
+import { loadRiskBufferSetting } from "@/lib/agent-store";
 import { getBasiqReadiness } from "./basiq/config";
 import type { ExpenseProfile, Receivable, RunwaySnapshot } from "./runway-contracts";
 import { ageReceivables, buildDualForecast, decideReminder } from "./runway-engine";
@@ -144,6 +145,7 @@ export async function loadRunwaySnapshot(now = new Date()): Promise<RunwaySnapsh
   const expenseProfile = parseExpenseProfile(
     latestSnapshot?.expenseProfileJson ?? null,
   );
+  const riskBufferSetting = await loadRiskBufferSetting();
   const forecast =
     expenseProfile && (bankState === "connected" || bankState === "stale")
       ? buildDualForecast({
@@ -152,6 +154,10 @@ export async function loadRunwaySnapshot(now = new Date()): Promise<RunwaySnapsh
             latestSnapshot?.operatingCashCents ?? 0,
           expense_profile: expenseProfile,
           receivables: items,
+          risk_buffer_override_cents:
+            riskBufferSetting.mode === "manual"
+              ? (riskBufferSetting.manualCents ?? undefined)
+              : undefined,
         })
       : null;
   const decision = forecast

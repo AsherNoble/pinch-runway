@@ -2,6 +2,10 @@ import { AgentCommandCenter } from "@/components/agent-command-center";
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 import type { RunwaySnapshot } from "@/lib/runway-contracts";
 import { loadAgentCommandState } from "@/lib/agent-store";
+import {
+  loadRuntimeFinancialContext,
+  type RuntimeFinancialContext,
+} from "@/lib/agent-runtime";
 import { buildAgentCommandCenterModel } from "@/lib/agent-view";
 import {
   ensureRunwayProfile,
@@ -50,10 +54,16 @@ export default async function Home() {
   let snapshot: RunwaySnapshot;
   let commandState: Awaited<ReturnType<typeof loadAgentCommandState>> | null =
     null;
+  // Computed fresh on every load, independent of agent run history, so the
+  // risk card never shows numbers frozen from a stale buffer setting. No
+  // side effects: this only reads data and runs the forecast math, unlike
+  // an actual agent run, which can create payment links and send messages.
+  let liveForecast: RuntimeFinancialContext | null = null;
   try {
     if (user) await ensureRunwayProfile(user.email);
     snapshot = await loadRunwaySnapshot();
     commandState = await loadAgentCommandState();
+    liveForecast = await loadRuntimeFinancialContext(new Date());
   } catch (error) {
     snapshot = unavailableSnapshot(
       error instanceof Error
@@ -63,13 +73,18 @@ export default async function Home() {
   }
   return (
     <AgentCommandCenter
-      model={buildAgentCommandCenterModel({ snapshot, commandState })}
+      model={buildAgentCommandCenterModel({
+        snapshot,
+        commandState,
+        liveForecast,
+      })}
       endpoints={{
         permission: "/api/agent/permissions",
         approval: "/api/agent/approvals",
         heartbeat: "/api/agent/heartbeat",
         trigger: "/api/internal/demo/agent/trigger",
         reset: "/api/internal/demo/agent/reset",
+        riskBuffer: "/api/agent/risk-buffer",
       }}
     />
   );

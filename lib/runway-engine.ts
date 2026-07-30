@@ -50,9 +50,13 @@ export function buildDualForecast(input: {
   opening_operating_cash_cents: Cents;
   expense_profile: ExpenseProfile;
   receivables: readonly Receivable[];
+  /** Owner override of the auto-computed 7-days-of-spend buffer. */
+  risk_buffer_override_cents?: Cents;
 }): DualForecast {
   const dates = Array.from({ length: 30 }, (_, index) => addDays(input.today, index));
-  const riskBuffer = input.expense_profile.normal_daily_spend_cents * 7;
+  const riskBuffer =
+    input.risk_buffer_override_cents ??
+    input.expense_profile.normal_daily_spend_cents * 7;
   let cashOnly = input.opening_operating_cash_cents;
   let expected = input.opening_operating_cash_cents;
   let cashLowest = cashOnly;
