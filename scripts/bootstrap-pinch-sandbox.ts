@@ -1,3 +1,4 @@
+import { CANONICAL_ORIGIN } from "../lib/canonical-host.ts";
 import { PinchSandboxClient } from "../lib/pinch/client.ts";
 import { getPinchReadiness, getPinchRuntimeConfig } from "../lib/pinch/config.ts";
 import { RUNWAY_SANDBOX_TEST_PAYERS } from "../lib/pinch/sandbox-fixtures.ts";
@@ -8,7 +9,7 @@ const CREATE_LINK_FLAG = "--create-payment-link";
 const DEMO_LINK = {
   amount: 50_000,
   description: "Runway sandbox payment link — demo proof only",
-  return_url: "https://pinch-runway.asherthenoble.chatgpt.site/payment-return",
+  return_url: `${CANONICAL_ORIGIN}/payment-return`,
   allowed_payment_methods: ["credit-card", "bank-account"] as const,
 };
 

@@ -22,6 +22,10 @@
     "remote": true
   },
   "vars": {
+    // The one hostname the app is served from. Setting this replaces the
+    // permissive fallback in lib/trusted-proxy.ts with a real allowlist, so a
+    // verified oai-* operator identity is honoured on the canonical host only.
+    "RUNWAY_TRUSTED_PROXY_HOSTS": "pinch-runway.asherthenoble.chatgpt.site",
     "BASIQ_API_BASE_URL": "https://au-api.basiq.io",
     "BASIQ_API_VERSION": "3.0",
     "RUNWAY_AUTOMATION_MODE": "off",

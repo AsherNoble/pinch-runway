@@ -6,8 +6,7 @@ Workers AI tool loop, a WhatsApp channel, and a web command centre. The agent ca
 monitor business evidence, explain emerging cash pressure, and complete only
 the administrative actions the owner has authorised.
 
-The original bank dashboard remains available at `/bank`. Both experiences keep
-two ideas deliberately separate:
+The command centre keeps two ideas deliberately separate:
 
 - **Cash available** is money currently accessible in selected AUD transaction
   and savings accounts.
