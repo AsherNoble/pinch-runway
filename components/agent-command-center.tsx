@@ -209,17 +209,27 @@ function Forecast({
             )}%`,
           } as CSSProperties;
           return (
-            <div
-              className="agent-week"
-              key={week.id}
-              style={style}
-              title={`${week.label}: cash only ${aud(
-                week.cashOnlyCents,
-              )}; expected ${aud(week.expectedCents)}`}
-            >
+            <div className="agent-week" key={week.id} style={style} tabIndex={0}>
+              <div className="agent-week-tooltip" aria-hidden="true">
+                <strong>{dateLabel(week.startsOn)}</strong>
+                <span>Cash only {aud(week.cashOnlyCents)}</span>
+                <span>Expected {aud(week.expectedCents)}</span>
+              </div>
               <div className="agent-week-bars" aria-hidden="true">
-                <i className="agent-week-cash" />
-                <i className="agent-week-expected" />
+                <i
+                  className={
+                    week.cashOnlyCents < 0
+                      ? "agent-week-cash agent-week-bar-negative"
+                      : "agent-week-cash"
+                  }
+                />
+                <i
+                  className={
+                    week.expectedCents < 0
+                      ? "agent-week-expected agent-week-bar-negative"
+                      : "agent-week-expected"
+                  }
+                />
               </div>
               <span>{week.label}</span>
               <span className="agent-sr-only">

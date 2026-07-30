@@ -958,7 +958,7 @@ h3 {
   gap: 15px;
   margin: 27px 0 13px;
   color: var(--muted);
-  font-size: 0.67rem;
+  font-size: 0.78rem;
   font-weight: 720;
 }
 
@@ -1018,6 +1018,7 @@ h3 {
 }
 
 .agent-week {
+  position: relative;
   display: grid;
   grid-template-rows: 270px auto;
   gap: 7px;
@@ -1025,9 +1026,51 @@ h3 {
   min-width: 0;
   color: var(--muted);
   font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.55rem;
+  font-size: 0.67rem;
   font-weight: 700;
   text-align: center;
+}
+
+.agent-week-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 2;
+  display: grid;
+  gap: 2px;
+  min-width: 150px;
+  transform: translate(-50%, 4px);
+  opacity: 0;
+  transition:
+    opacity 0.08s ease,
+    transform 0.08s ease;
+  pointer-events: none;
+  border-radius: 10px;
+  padding: 9px 11px;
+  color: #f8f6ed;
+  background: var(--ink);
+  box-shadow: 0 10px 26px rgba(23, 38, 31, 0.32);
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.agent-week-tooltip strong {
+  margin-bottom: 2px;
+  color: #cfe4cf;
+  font-size: 0.62rem;
+  font-weight: 780;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.agent-week:hover .agent-week-tooltip,
+.agent-week:focus-visible .agent-week-tooltip {
+  transform: translate(-50%, 0);
+  opacity: 1;
 }
 
 .agent-week-bars {
@@ -1041,6 +1084,12 @@ h3 {
   width: calc(50% - 1px);
   min-height: 2px;
   border-radius: 3px 3px 1px 1px;
+}
+
+/* Below zero, the bar's rounded end is its bottom tip, not the end
+   touching the zero line, so the rounding flips. */
+.agent-week-bars > i.agent-week-bar-negative {
+  border-radius: 1px 1px 3px 3px;
 }
 
 .agent-week-cash {
