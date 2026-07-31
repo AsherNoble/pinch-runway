@@ -30,8 +30,8 @@ export async function generateMetadata(): Promise<Metadata> {
     title,
     description,
     icons: {
-      icon: "/favicon.svg",
-      shortcut: "/favicon.svg",
+      icon: [{ url: "/favicon.svg?v=2", type: "image/svg+xml" }],
+      shortcut: "/favicon.svg?v=2",
     },
     openGraph: {
       title,

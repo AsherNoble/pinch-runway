@@ -104,7 +104,7 @@ test("Pinch client creates a Payment Link and tolerates amountInCents", async ()
       allowedPaymentMethods: ["credit-card", "bank-account"],
       returnUrl: "https://demo.example/payment-return",
       currency: "AUD",
-      metadata: { sourcePaymentId: "pay_001" },
+      metadata: '{"sourcePaymentId":"pay_001"}',
     });
     return Response.json({
       id: "plk_001",

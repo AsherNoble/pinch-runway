@@ -129,6 +129,21 @@ export interface PaymentLinkReuseStore {
   save(record: StoredPaymentLink): Promise<void>;
 }
 
+/**
+ * Metadata may arrive as free text, which cannot be spread into an object.  The
+ * idempotency key has to survive either shape, so a string payload is folded
+ * into a record under `note` rather than exploded into character-indexed keys.
+ */
+function withIdempotencyKey(
+  metadata: CreatePinchPaymentLinkInput["metadata"],
+  idempotencyKey: string,
+): Record<string, string | number | boolean | null> {
+  if (typeof metadata === "string") {
+    return { note: metadata, runway_idempotency_key: idempotencyKey };
+  }
+  return { ...metadata, runway_idempotency_key: idempotencyKey };
+}
+
 export async function createOrReusePinchPaymentLink(
   input: CreatePinchPaymentLinkInput & { idempotency_key: string; now?: Date },
   dependencies: {
@@ -155,10 +170,7 @@ export async function createOrReusePinchPaymentLink(
       description: input.description,
       return_url: input.return_url,
       allowed_payment_methods: input.allowed_payment_methods,
-      metadata: {
-        ...input.metadata,
-        runway_idempotency_key: key,
-      },
+      metadata: withIdempotencyKey(input.metadata, key),
     });
     const timestamp = (input.now ?? new Date()).toISOString();
     await dependencies.store.save({

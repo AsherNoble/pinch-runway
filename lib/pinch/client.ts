@@ -84,7 +84,12 @@ export interface CreatePinchPaymentLinkInput {
   description: string;
   return_url: string;
   allowed_payment_methods: readonly ("credit-card" | "bank-account")[];
-  metadata?: Record<string, string | number | boolean | null>;
+  /**
+   * Pinch accepts free text for Payment Link metadata.  Runway callers may use
+   * a small structured record, which is serialised to JSON before it crosses
+   * the provider boundary.
+   */
+  metadata?: string | Record<string, string | number | boolean | null>;
 }
 
 export interface CreatedPinchPaymentLink {
@@ -329,7 +334,9 @@ export class PinchSandboxClient {
         allowedPaymentMethods: input.allowed_payment_methods,
         returnUrl: input.return_url,
         currency: "AUD",
-        ...(input.metadata ? { metadata: input.metadata } : {}),
+        ...(input.metadata
+          ? { metadata: serialisePaymentLinkMetadata(input.metadata) }
+          : {}),
       },
     });
     const record = asRecord(payload, "Pinch returned an invalid Payment Link response.");
@@ -456,6 +463,13 @@ export class PinchSandboxClient {
     };
     return accessToken;
   }
+}
+
+function serialisePaymentLinkMetadata(
+  metadata: NonNullable<CreatePinchPaymentLinkInput["metadata"]>,
+): string {
+  if (typeof metadata === "string") return metadata;
+  return JSON.stringify(metadata);
 }
 
 /** Test-only reset for isolated mocked-fetch tests. */

@@ -43,3 +43,15 @@ next-env.d.ts
 /outputs/
 /work/
 /workers/ai-gateway/.dev.vars
+
+# local agent config
+/.claude/
+
+# local scratch
+/todo.md
+
+# logo work-in-progress assets
+/public/runway-logo-concept.png
+/public/runway-logo-concept-v2.png
+/public/runway-logo-reference.png
+/public/runway-logo.svg
