@@ -1,21 +1,14 @@
 import { getChatGPTUser } from "@/app/chatgpt-auth";
 
-export async function isAgentOperatorRequest(request: Request): Promise<boolean> {
+/**
+ * Deployed as a fully open public demo: no real Pinch/Twilio credentials are
+ * configured on it, so no action here has a real-world side effect. Genuine
+ * ChatGPT-proxy identity is still honored when present; otherwise every
+ * request is treated as the operator unless RUNWAY_ENABLE_DEMO_AGENT=0.
+ */
+export async function isAgentOperatorRequest(
+  _request: Request,
+): Promise<boolean> {
   if (await getChatGPTUser()) return true;
-  if (process.env.RUNWAY_ENABLE_DEMO_AGENT === "0") return false;
-
-  const url = new URL(request.url);
-  const localHost =
-    url.hostname === "localhost" ||
-    url.hostname === "127.0.0.1" ||
-    url.hostname === "[::1]";
-  if (!localHost) return false;
-
-  const origin = request.headers.get("origin");
-  if (!origin) return false;
-  try {
-    return new URL(origin).host === url.host;
-  } catch {
-    return false;
-  }
+  return process.env.RUNWAY_ENABLE_DEMO_AGENT !== "0";
 }
