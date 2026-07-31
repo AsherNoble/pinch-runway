@@ -127,14 +127,16 @@ export function buildAgentCommandCenterModel(input: {
         status: "seeded",
         detail: "Finance-relevant inbox fixture and simulated outbox",
         updatedAt: "2026-07-26T19:15:00+10:00",
-        provenance: "simulated",
+        // The inbox itself is seeded fixture data; "simulated" describes
+        // an action taken (e.g. a send), which this source display isn't.
+        provenance: "seeded",
       },
       {
         name: "Calendar",
         status: "seeded",
         detail: "Project and delivery evidence fixture",
         updatedAt: "2026-07-26T19:15:00+10:00",
-        provenance: "simulated",
+        provenance: "seeded",
       },
       {
         name: "Workers AI",

@@ -12,7 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-export type AgentProvenance = "live" | "simulated" | "fallback";
+export type AgentProvenance = "live" | "simulated" | "seeded" | "fallback";
 export type AgentPermissionMode = "blocked" | "ask" | "auto";
 export type AgentSourceName =
   | "Basiq"
@@ -21,6 +21,9 @@ export type AgentSourceName =
   | "Calendar"
   | "Workers AI"
   | "WhatsApp";
+
+type SourceView = "scroll" | "list" | "block";
+const SOURCE_VIEW_STORAGE_KEY = "runway-source-view";
 
 export interface AgentCommandCenterViewModel {
   generatedAt: string;
@@ -147,16 +150,125 @@ function dateLabel(value: string | null, includeTime = false) {
   }).format(date);
 }
 
-function sourceStatusLabel(
-  status: AgentCommandCenterViewModel["sources"][number]["status"],
+function sourceSyncLabel(
+  source: AgentCommandCenterViewModel["sources"][number],
 ) {
-  return status.replaceAll("_", " ");
+  return source.updatedAt
+    ? `Updated ${dateLabel(source.updatedAt, true)}`
+    : "No successful sync recorded";
 }
 
-function ProvenanceBadge({ value }: { value: AgentProvenance }) {
+function ScrollViewIcon() {
   return (
-    <span className={`agent-provenance agent-provenance-${value}`}>
-      {value}
+    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+      <rect height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" width="6" x="1" y="3" />
+      <rect height="10" rx="1.5" stroke="currentColor" strokeWidth="1.4" width="6" x="9" y="3" />
+    </svg>
+  );
+}
+
+function ListViewIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+      <path
+        d="M2 4h12M2 8h12M2 12h12"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="1.4"
+      />
+    </svg>
+  );
+}
+
+function BlockViewIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+      <rect height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" width="5.5" x="1.5" y="1.5" />
+      <rect height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" width="5.5" x="9" y="1.5" />
+      <rect height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" width="5.5" x="1.5" y="9" />
+      <rect height="5.5" rx="1.2" stroke="currentColor" strokeWidth="1.3" width="5.5" x="9" y="9" />
+    </svg>
+  );
+}
+
+const PROVENANCE_GLOSSARY: Record<
+  AgentProvenance,
+  { label: string; description: string }
+> = {
+  live: {
+    label: "Live",
+    description: "Confirmed just now by the real provider.",
+  },
+  simulated: {
+    label: "Simulated",
+    description:
+      "A safe rehearsal. Nothing is sent to a real person or account.",
+  },
+  seeded: {
+    label: "Seeded",
+    description:
+      "Realistic fixture data for the demo, not connected to anything real.",
+  },
+  fallback: {
+    label: "Fallback",
+    description:
+      "The live check didn't succeed (or isn't configured), so an audited baseline is shown instead.",
+  },
+};
+
+function ProvenanceBadge({ value }: { value: AgentProvenance }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const { popRef, coords } = usePopoverPosition(open, triggerRef, "left");
+  const entry = PROVENANCE_GLOSSARY[value];
+
+  useEffect(() => {
+    if (!open) return;
+    function handleOutsideClick(event: MouseEvent) {
+      const target = event.target as Node;
+      if (
+        !triggerRef.current?.contains(target) &&
+        !popRef.current?.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, [open, popRef]);
+
+  return (
+    <span className="agent-provenance-control">
+      <button
+        aria-expanded={open}
+        className={`agent-provenance agent-provenance-${value}`}
+        onClick={() => setOpen((current) => !current)}
+        ref={triggerRef}
+        type="button"
+      >
+        {value}
+        <span aria-hidden="true" className="agent-provenance-q">
+          ?
+        </span>
+      </button>
+      {open
+        ? createPortal(
+            <div
+              className="agent-provenance-pop"
+              ref={popRef}
+              role="note"
+              style={{
+                top: coords?.top ?? 0,
+                left: coords?.left ?? 0,
+                visibility: coords ? "visible" : "hidden",
+              }}
+            >
+              <strong>{entry.label}</strong>
+              <p>{entry.description}</p>
+            </div>,
+            document.body,
+          )
+        : null}
     </span>
   );
 }
@@ -472,11 +584,7 @@ function BufferControl({
     >
       <div className="agent-buffer-pop-head">
         <strong>Why {aud(bufferCents)}?</strong>
-        <span
-          className={`agent-provenance agent-provenance-${
-            bufferMode === "manual" ? "simulated" : "live"
-          }`}
-        >
+        <span className="agent-mode-pill">
           {bufferMode === "manual" ? "manual" : "auto"}
         </span>
       </div>
@@ -615,7 +723,24 @@ export function AgentCommandCenter({
   const [message, setMessage] = useState("");
   const [messageHovered, setMessageHovered] = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
+  // Starts at the SSR-matching default and syncs from localStorage after
+  // mount (client-only effect) rather than reading it in the initializer,
+  // so the client's first render always matches the server's and hydration
+  // never mismatches.
+  const [sourceView, setSourceView] = useState<SourceView>("scroll");
   const router = useRouter();
+
+  useEffect(() => {
+    const stored = window.localStorage.getItem(SOURCE_VIEW_STORAGE_KEY);
+    if (stored === "scroll" || stored === "list" || stored === "block") {
+      setSourceView(stored);
+    }
+  }, []);
+
+  function selectSourceView(view: SourceView) {
+    setSourceView(view);
+    window.localStorage.setItem(SOURCE_VIEW_STORAGE_KEY, view);
+  }
 
   // Auto-dismiss the status toast after a few seconds, unless the user is
   // actively hovering it. Re-runs (and restarts the timer) whenever the
@@ -1025,33 +1150,95 @@ export function AgentCommandCenter({
             <p className="eyebrow">Connected context</p>
             <h2>What the agent can currently see</h2>
           </div>
-          <p>Every source says whether it is live, seeded or using a fallback.</p>
+          <div
+            aria-label="Source layout"
+            className="agent-segmented-control agent-view-switcher"
+            role="group"
+          >
+            {(
+              [
+                { view: "scroll", label: "Scroll", icon: <ScrollViewIcon /> },
+                { view: "list", label: "List", icon: <ListViewIcon /> },
+                { view: "block", label: "Block", icon: <BlockViewIcon /> },
+              ] as const
+            ).map(({ view, label, icon }) => (
+              <button
+                aria-pressed={sourceView === view}
+                className={sourceView === view ? "agent-mode-selected" : undefined}
+                key={view}
+                onClick={() => selectSourceView(view)}
+                type="button"
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="agent-source-grid">
-          {model.sources.map((source) => (
-            <article
-              className={`agent-source-card agent-source-${source.status}`}
-              key={source.name}
-            >
-              <div className="agent-source-heading">
+
+        {sourceView === "scroll" ? (
+          <div className="agent-source-scroll-outer">
+            <div className="agent-source-scroll-row">
+              {model.sources.map((source) => (
+                <article
+                  className={`agent-source-card agent-source-${source.status}`}
+                  key={source.name}
+                >
+                  <div className="agent-source-heading">
+                    <span className="agent-source-mark" aria-hidden="true">
+                      {source.name.slice(0, 1)}
+                    </span>
+                    <h3>{source.name}</h3>
+                    <ProvenanceBadge value={source.provenance} />
+                  </div>
+                  <p>{source.detail}</p>
+                  <small>{sourceSyncLabel(source)}</small>
+                </article>
+              ))}
+            </div>
+            <p className="agent-source-scroll-hint">Scroll for more sources →</p>
+          </div>
+        ) : null}
+
+        {sourceView === "list" ? (
+          <div className="agent-source-list">
+            {model.sources.map((source) => (
+              <div
+                className={`agent-source-list-row agent-source-${source.status}`}
+                key={source.name}
+              >
                 <span className="agent-source-mark" aria-hidden="true">
                   {source.name.slice(0, 1)}
                 </span>
-                <div>
-                  <h3>{source.name}</h3>
-                  <span>{sourceStatusLabel(source.status)}</span>
-                </div>
+                <h3>{source.name}</h3>
                 <ProvenanceBadge value={source.provenance} />
+                <p>{source.detail}</p>
+                <small>{sourceSyncLabel(source)}</small>
               </div>
-              <p>{source.detail}</p>
-              <small>
-                {source.updatedAt
-                  ? `Updated ${dateLabel(source.updatedAt, true)}`
-                  : "No successful sync recorded"}
-              </small>
-            </article>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : null}
+
+        {sourceView === "block" ? (
+          <div className="agent-source-grid">
+            {model.sources.map((source) => (
+              <article
+                className={`agent-source-card agent-source-${source.status}`}
+                key={source.name}
+              >
+                <div className="agent-source-heading">
+                  <span className="agent-source-mark" aria-hidden="true">
+                    {source.name.slice(0, 1)}
+                  </span>
+                  <h3>{source.name}</h3>
+                  <ProvenanceBadge value={source.provenance} />
+                </div>
+                <p>{source.detail}</p>
+                <small>{sourceSyncLabel(source)}</small>
+              </article>
+            ))}
+          </div>
+        ) : null}
       </section>
 
       {pendingApprovals.length ? (

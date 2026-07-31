@@ -809,6 +809,22 @@ h3 {
   letter-spacing: -0.01em;
 }
 
+/* Deliberately not one of the agent-provenance-* colors: auto/manual is a
+   config setting, not a live/simulated/seeded/fallback data-trust signal,
+   and reusing those colors implied a meaning this pill doesn't have. */
+.agent-mode-pill {
+  border: 1px solid #c9c2a8;
+  border-radius: 999px;
+  padding: 6px 8px;
+  color: #5c5330;
+  background: #f2ead0;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.61rem;
+  font-weight: 780;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
 .agent-buffer-formula {
   display: grid;
   gap: 8px;
@@ -1024,8 +1040,7 @@ h3 {
 }
 
 .agent-action-state,
-.agent-provenance,
-.agent-source-heading > div > span {
+.agent-provenance {
   border-radius: 999px;
   font-family: var(--font-geist-mono), ui-monospace, monospace;
   font-size: 0.61rem;
@@ -1039,6 +1054,67 @@ h3 {
 .agent-provenance {
   border: 1px solid transparent;
   padding: 6px 8px;
+}
+
+.agent-provenance {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+
+.agent-provenance-control {
+  position: relative;
+  display: inline-flex;
+}
+
+.agent-provenance-q {
+  display: grid;
+  place-items: center;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.14);
+  font-size: 0.55rem;
+}
+
+.agent-provenance:hover .agent-provenance-q,
+.agent-provenance[aria-expanded="true"] .agent-provenance-q {
+  background: rgba(0, 0, 0, 0.26);
+}
+
+.agent-provenance:focus-visible {
+  outline: 3px solid rgba(22, 78, 59, 0.26);
+  outline-offset: 2px;
+}
+
+.agent-provenance-pop {
+  position: fixed;
+  z-index: 60;
+  width: min(240px, 78vw);
+  border: 1px solid rgba(23, 38, 31, 0.14);
+  border-radius: 12px;
+  padding: 12px 13px;
+  background: var(--card);
+  box-shadow: 0 20px 48px rgba(23, 38, 31, 0.22);
+  text-align: left;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+}
+
+.agent-provenance-pop strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+
+.agent-provenance-pop p {
+  margin: 0;
+  color: #405047;
+  font-size: 0.75rem;
+  line-height: 1.48;
 }
 
 .agent-state-recommended {
@@ -1067,6 +1143,12 @@ h3 {
   border-color: #dcc271;
   color: #76520b;
   background: #fff5d8;
+}
+
+.agent-provenance-seeded {
+  border-color: #b7c0e0;
+  color: #33418b;
+  background: #eaedfb;
 }
 
 .agent-provenance-fallback {
@@ -1680,9 +1762,147 @@ h3 {
 
 .agent-source-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
   margin-top: 24px;
+  /* Belt-and-suspenders: cards wrap to more rows first, but if a future
+     source name genuinely can't fit even at the 200px floor, scroll
+     instead of silently overflowing into the next card. */
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.agent-view-switcher {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 220px;
+}
+
+.agent-view-switcher button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.agent-view-switcher button svg {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+}
+
+/* ---- scroll view: one row, horizontal scroll instead of wrapping ---- */
+
+.agent-source-scroll-outer {
+  position: relative;
+  margin-top: 24px;
+}
+
+.agent-source-scroll-outer::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 10px;
+  width: 46px;
+  background: linear-gradient(to right, rgba(255, 253, 248, 0), var(--card) 88%);
+  content: "";
+  pointer-events: none;
+}
+
+.agent-source-scroll-row {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scrollbar-width: thin;
+  scrollbar-color: #c7bfa0 transparent;
+}
+
+.agent-source-scroll-row::-webkit-scrollbar {
+  height: 7px;
+}
+
+.agent-source-scroll-row::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.agent-source-scroll-row::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #c7bfa0;
+}
+
+.agent-source-scroll-row .agent-source-card {
+  /* Wide enough that the longest name + badge combination ("WhatsApp" +
+     "FALLBACK") never needs the ellipsis fallback in practice. */
+  flex: 0 0 232px;
+}
+
+.agent-source-scroll-hint {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+/* ---- list view: one full-width row per source ---- */
+
+.agent-source-list {
+  margin-top: 20px;
+}
+
+.agent-source-list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding: 12px 2px;
+}
+
+.agent-source-list-row:first-child {
+  border-top: none;
+}
+
+.agent-source-list-row h3 {
+  flex: 0 0 110px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 0.85rem;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.agent-source-list-row .agent-provenance-control {
+  flex: 0 0 auto;
+}
+
+.agent-source-list-row p {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.agent-source-list-row small {
+  flex: 0 0 auto;
+  color: #7c8781;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 0.6rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+@media (max-width: 720px) {
+  .agent-source-list-row {
+    flex-wrap: wrap;
+  }
+
+  .agent-source-list-row small {
+    flex-basis: 100%;
+    padding-left: 39px;
+  }
 }
 
 .agent-source-card {
@@ -1703,17 +1923,19 @@ h3 {
 
 .agent-source-heading {
   gap: 8px;
+  align-items: center;
 }
 
-.agent-source-heading > div {
-  min-width: 0;
+.agent-source-heading h3 {
+  overflow: hidden;
   flex: 1;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.agent-source-heading > div > span {
-  display: block;
-  color: var(--muted);
-  font-size: 0.52rem;
+.agent-source-heading .agent-provenance-control {
+  flex-shrink: 0;
 }
 
 .agent-source-mark {

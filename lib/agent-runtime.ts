@@ -902,7 +902,16 @@ async function executePermittedTool(
 
 export async function loadRuntimeFinancialContext(
   now: Date,
+  options: { injectScenarioEvent?: boolean } = {},
 ): Promise<RuntimeFinancialContext> {
+  // The Frame & Light bill and the Northstar Pilates receivable are the
+  // *injected demo event*, not a permanent baseline - they should only
+  // appear once the demo scenario has actually been triggered. Every
+  // internal caller in this file only runs in service of an
+  // already-triggered run, so they default to including it; the page-load
+  // read path (app/page.tsx) is the one caller that must pass this
+  // explicitly, since it runs whether or not anything has been triggered.
+  const injectScenarioEvent = options.injectScenarioEvent ?? true;
   let snapshot;
   try {
     snapshot = await loadRunwaySnapshot(now);
@@ -967,28 +976,32 @@ export async function loadRuntimeFinancialContext(
             provenance: "live" as const,
           }))
       : [],
-    evidence_commitments: [
-      {
-        id: "gmail:FL-8821",
-        label: "Frame & Light equipment damage invoice",
-        amount_cents: SEEDED_BUSINESS_PROFILE.unexpected_bill_amount_cents,
-        due_date: "2026-08-03",
-        source: "gmail",
-        source_id: "gmail-msg-unexpected-bill",
-        provenance: "simulated",
-      },
-    ],
-    receivables: [
-      {
-        id: DEMO_INVOICE_ID,
-        payer_name: SEEDED_BUSINESS_PROFILE.client_business,
-        amount_cents: SEEDED_BUSINESS_PROFILE.overdue_invoice_amount_cents,
-        due_date: "2026-07-22",
-        expected_date: today,
-        status: "unpaid",
-        reminder_count: 0,
-      },
-    ],
+    evidence_commitments: injectScenarioEvent
+      ? [
+          {
+            id: "gmail:FL-8821",
+            label: "Frame & Light equipment damage invoice",
+            amount_cents: SEEDED_BUSINESS_PROFILE.unexpected_bill_amount_cents,
+            due_date: "2026-08-03",
+            source: "gmail",
+            source_id: "gmail-msg-unexpected-bill",
+            provenance: "simulated",
+          },
+        ]
+      : [],
+    receivables: injectScenarioEvent
+      ? [
+          {
+            id: DEMO_INVOICE_ID,
+            payer_name: SEEDED_BUSINESS_PROFILE.client_business,
+            amount_cents: SEEDED_BUSINESS_PROFILE.overdue_invoice_amount_cents,
+            due_date: "2026-07-22",
+            expected_date: today,
+            status: "unpaid",
+            reminder_count: 0,
+          },
+        ]
+      : [],
   };
   let forecast = buildAgentForecast(baseInput);
   let bankProvenance: Provenance = liveSnapshot ? "live" : "fallback";
@@ -996,7 +1009,10 @@ export async function loadRuntimeFinancialContext(
     ? null
     : "Basiq was not ready; the forecast uses the audited demo cash baseline.";
 
-  if (forecast.material_risk_date === null) {
+  // Forcing the scripted demo baseline only makes sense when we were trying
+  // to show the injected scenario's risk in the first place - without it,
+  // "no risk" is the correct, quiet answer, not a fallback to paper over.
+  if (injectScenarioEvent && forecast.material_risk_date === null) {
     forecast = buildAgentForecast({
       ...baseInput,
       opening_cash_cents: DEMO_OPENING_CASH_CENTS,

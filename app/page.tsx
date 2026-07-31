@@ -63,7 +63,13 @@ export default async function Home() {
     if (user) await ensureRunwayProfile(user.email);
     snapshot = await loadRunwaySnapshot();
     commandState = await loadAgentCommandState();
-    liveForecast = await loadRuntimeFinancialContext(new Date());
+    liveForecast = await loadRuntimeFinancialContext(new Date(), {
+      // The Frame & Light bill and overdue invoice are the injected demo
+      // event, not a permanent baseline - only show their effect once the
+      // scenario has actually been triggered, so "Reset scenario" produces
+      // a genuinely quiet dashboard again instead of an immediate reinjection.
+      injectScenarioEvent: commandState.demoState.scenarioState !== "ready",
+    });
   } catch (error) {
     snapshot = unavailableSnapshot(
       error instanceof Error
