@@ -1788,6 +1788,10 @@ h3 {
   line-height: 1.45;
 }
 
+.agent-permission-note strong {
+  color: var(--ink);
+}
+
 .agent-source-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -2070,6 +2074,52 @@ h3 {
 .agent-segmented-control button:disabled {
   cursor: not-allowed;
   opacity: 0.55;
+}
+
+.agent-permission-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.agent-permission-control .agent-segmented-control button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+.agent-permission-control .agent-segmented-control button svg {
+  flex: 0 0 auto;
+  width: 11px;
+  height: 11px;
+}
+
+.agent-permission-consequence {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.71rem;
+  font-weight: 650;
+}
+
+.agent-permission-consequence svg {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+}
+
+.agent-permission-consequence-blocked {
+  color: #89382e;
+}
+
+.agent-permission-consequence-ask {
+  color: #76520b;
+}
+
+.agent-permission-consequence-auto {
+  color: #1f6646;
 }
 
 .agent-unavailable {

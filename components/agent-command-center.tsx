@@ -191,6 +191,74 @@ function BlockViewIcon() {
   );
 }
 
+function BlockedModeIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.4" />
+      <path
+        d="M4.2 4.2l7.6 7.6"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function AskModeIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+      <rect
+        height="9"
+        rx="0.6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        width="2.2"
+        x="4.5"
+        y="3.5"
+      />
+      <rect
+        height="9"
+        rx="0.6"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        width="2.2"
+        x="9.3"
+        y="3.5"
+      />
+    </svg>
+  );
+}
+
+function AutoModeIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" viewBox="0 0 16 16">
+      <path
+        d="M8.6 1.5L3 9h4l-0.6 5.5L13 7H9l-0.4-5.5z"
+        fill="currentColor"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.1"
+      />
+    </svg>
+  );
+}
+
+// Deliberately not the checkmark/arrow/"?" icons used elsewhere on the page
+// (risk-banner done/pending, explainer popovers) - a distinct vocabulary so
+// these three don't quietly borrow a meaning the reader already learned.
+const PERMISSION_MODE_META: Record<
+  AgentPermissionMode,
+  { Icon: () => ReactNode; consequence: string }
+> = {
+  blocked: { Icon: BlockedModeIcon, consequence: "Never runs on its own" },
+  ask: { Icon: AskModeIcon, consequence: "Pauses here until you approve it" },
+  auto: {
+    Icon: AutoModeIcon,
+    consequence: "Runs automatically, no approval needed",
+  },
+};
+
 const PROVENANCE_GLOSSARY: Record<
   AgentProvenance,
   { label: string; description: string }
@@ -1090,6 +1158,59 @@ export function AgentCommandCenter({
         </dl>
       </section>
 
+      {pendingApprovals.length ? (
+        <section
+          aria-labelledby="agent-approval-title"
+          className="agent-panel agent-approval-section"
+        >
+          <div className="agent-card-heading">
+            <div>
+              <p className="eyebrow">Waiting on you</p>
+              <h2 id="agent-approval-title">
+                {pendingApprovals.length === 1
+                  ? "Runway paused one action for your decision"
+                  : `Runway paused ${pendingApprovals.length} actions for your decision`}
+              </h2>
+            </div>
+            {!endpoints.approval ? (
+              <span className="agent-unavailable">Controls not connected</span>
+            ) : null}
+          </div>
+          <ul className="agent-approval-list">
+            {pendingApprovals.map((approval) => (
+              <li className="agent-approval-row" key={approval.id}>
+                <div>
+                  <strong>{approval.label}</strong>
+                  <p>{approval.summary}</p>
+                  <time dateTime={approval.requestedAt}>
+                    Proposed {dateLabel(approval.requestedAt, true)} · nothing has
+                    run yet
+                  </time>
+                </div>
+                <div className="agent-approval-actions">
+                  <button
+                    className="agent-approve"
+                    disabled={!endpoints.approval || busyApproval === approval.id}
+                    onClick={() => void decideApproval(approval.id, "approve")}
+                    type="button"
+                  >
+                    {busyApproval === approval.id ? "Working…" : "Approve"}
+                  </button>
+                  <button
+                    className="agent-deny"
+                    disabled={!endpoints.approval || busyApproval === approval.id}
+                    onClick={() => void decideApproval(approval.id, "deny")}
+                    type="button"
+                  >
+                    Deny
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <div className="agent-main-grid">
         <section className="agent-panel agent-forecast-panel">
           <div className="agent-card-heading">
@@ -1267,59 +1388,6 @@ export function AgentCommandCenter({
         ) : null}
       </section>
 
-      {pendingApprovals.length ? (
-        <section
-          aria-labelledby="agent-approval-title"
-          className="agent-panel agent-approval-section"
-        >
-          <div className="agent-card-heading">
-            <div>
-              <p className="eyebrow">Waiting on you</p>
-              <h2 id="agent-approval-title">
-                {pendingApprovals.length === 1
-                  ? "Runway paused one action for your decision"
-                  : `Runway paused ${pendingApprovals.length} actions for your decision`}
-              </h2>
-            </div>
-            {!endpoints.approval ? (
-              <span className="agent-unavailable">Controls not connected</span>
-            ) : null}
-          </div>
-          <ul className="agent-approval-list">
-            {pendingApprovals.map((approval) => (
-              <li className="agent-approval-row" key={approval.id}>
-                <div>
-                  <strong>{approval.label}</strong>
-                  <p>{approval.summary}</p>
-                  <time dateTime={approval.requestedAt}>
-                    Proposed {dateLabel(approval.requestedAt, true)} · nothing has
-                    run yet
-                  </time>
-                </div>
-                <div className="agent-approval-actions">
-                  <button
-                    className="agent-approve"
-                    disabled={!endpoints.approval || busyApproval === approval.id}
-                    onClick={() => void decideApproval(approval.id, "approve")}
-                    type="button"
-                  >
-                    {busyApproval === approval.id ? "Working…" : "Approve"}
-                  </button>
-                  <button
-                    className="agent-deny"
-                    disabled={!endpoints.approval || busyApproval === approval.id}
-                    onClick={() => void decideApproval(approval.id, "deny")}
-                    type="button"
-                  >
-                    Deny
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
       <section className="agent-panel agent-permission-section">
         <div className="agent-card-heading">
           <div>
@@ -1331,45 +1399,60 @@ export function AgentCommandCenter({
           ) : null}
         </div>
         <div className="agent-permission-list">
-          {model.permissions.map((permission) => (
-            <div className="agent-permission-row" key={permission.actionClass}>
-              <div>
-                <strong>{permission.label}</strong>
-                <p>{permission.description}</p>
-              </div>
-              <div
-                aria-label={`${permission.label} permission`}
-                className="agent-segmented-control"
-                role="group"
-              >
-                {permissionModes.map(({ mode, label }) => (
-                  <button
-                    aria-pressed={permissions[permission.actionClass] === mode}
-                    className={
-                      permissions[permission.actionClass] === mode
-                        ? "agent-mode-selected"
-                        : undefined
-                    }
-                    disabled={
-                      !endpoints.permission ||
-                      busyPermission === permission.actionClass
-                    }
-                    key={mode}
-                    onClick={() =>
-                      void savePermission(permission.actionClass, mode)
-                    }
-                    type="button"
+          {model.permissions.map((permission) => {
+            const currentMode = permissions[permission.actionClass];
+            const CurrentIcon = PERMISSION_MODE_META[currentMode].Icon;
+            return (
+              <div className="agent-permission-row" key={permission.actionClass}>
+                <div>
+                  <strong>{permission.label}</strong>
+                  <p>{permission.description}</p>
+                </div>
+                <div className="agent-permission-control">
+                  <div
+                    aria-label={`${permission.label} permission`}
+                    className="agent-segmented-control"
+                    role="group"
                   >
-                    {label}
-                  </button>
-                ))}
+                    {permissionModes.map(({ mode, label }) => {
+                      const Icon = PERMISSION_MODE_META[mode].Icon;
+                      return (
+                        <button
+                          aria-pressed={currentMode === mode}
+                          className={
+                            currentMode === mode
+                              ? "agent-mode-selected"
+                              : undefined
+                          }
+                          disabled={
+                            !endpoints.permission ||
+                            busyPermission === permission.actionClass
+                          }
+                          key={mode}
+                          onClick={() =>
+                            void savePermission(permission.actionClass, mode)
+                          }
+                          type="button"
+                        >
+                          <Icon />
+                          {label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <span className={`agent-permission-consequence agent-permission-consequence-${currentMode}`}>
+                    <CurrentIcon />
+                    {PERMISSION_MODE_META[currentMode].consequence}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
         <p className="agent-permission-note">
-          Blocked stops the action outright. Ask me pauses it here for your
-          approval before anything happens. Auto lets Runway act and log it.
+          <strong>Legend, for reference:</strong> Blocked never runs on its
+          own. Ask me pauses here for your approval. Auto runs and logs it
+          immediately.
         </p>
       </section>
 
