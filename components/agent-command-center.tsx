@@ -955,17 +955,18 @@ export function AgentCommandCenter({
               <p className="eyebrow">{risk.eyebrow}</p>
               <h2 id="agent-risk-title">{risk.title}</h2>
             </div>
-            <div className="agent-badge-row">
-              <span className={`agent-action-state agent-state-${risk.actionState}`}>
-                {risk.actionState.replaceAll("_", " ")}
-              </span>
-              <ProvenanceBadge value={risk.provenance} />
-            </div>
+            <ProvenanceBadge value={risk.provenance} />
           </div>
           <p>{risk.summary}</p>
-          <div className="agent-recommended-action">
-            <span>Runway’s move</span>
-            <strong>{risk.actionLabel}</strong>
+          <div
+            className={`agent-status-line agent-status-${
+              risk.actionState === "completed" ? "done" : "pending"
+            }`}
+          >
+            <span className="agent-status-mark" aria-hidden="true">
+              {risk.actionState === "completed" ? "✓" : "→"}
+            </span>
+            {risk.actionLabel}
           </div>
         </div>
         <dl className="agent-risk-stats">

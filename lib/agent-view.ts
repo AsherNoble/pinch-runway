@@ -2,7 +2,10 @@ import type {
   AgentCommandCenterViewModel,
   AgentProvenance,
 } from "@/components/agent-command-center";
-import { getTwilioWhatsAppReadiness } from "@/lib/agent-integrations";
+import {
+  getTwilioWhatsAppReadiness,
+  SEEDED_BUSINESS_PROFILE,
+} from "@/lib/agent-integrations";
 import type { loadAgentCommandState } from "@/lib/agent-store";
 import {
   DEMO_RISK_BUFFER_CENTS,
@@ -33,6 +36,13 @@ export function buildAgentCommandCenterModel(input: {
   const target = forecast?.ranked_collection_targets[0];
   const actionCompleted = run?.status === "completed";
   const actionPaused = run?.status === "awaiting_approval" || run?.status === "failed";
+  // Whether the demo bill/invoice were actually injected into this forecast
+  // (see loadRuntimeFinancialContext's injectScenarioEvent) - naming Frame &
+  // Light specifically is only accurate when it's the thing actually driving
+  // the risk. Genuine risk from live bank data alone gets a generic title.
+  const scenarioInjected =
+    input.commandState?.demoState.scenarioState !== "ready";
+  const riskDateLabel = shortDate(forecast?.material_risk_date ?? null);
 
   return {
     generatedAt: now.toISOString(),
@@ -43,12 +53,18 @@ export function buildAgentCommandCenterModel(input: {
       level: materialRisk ? "material" : input.snapshot.forecast ? "watch" : "comfortable",
       eyebrow: materialRisk ? "Material cash pressure" : "Current position",
       title: materialRisk
-        ? `The new supplier bill puts your buffer at risk`
+        ? scenarioInjected
+          ? `${aud(SEEDED_BUSINESS_PROFILE.unexpected_bill_amount_cents)} ${SEEDED_BUSINESS_PROFILE.supplier_name} bill drops cash below buffer${riskDateLabel ? ` on ${riskDateLabel}` : ""}`
+          : `Cash drops below your buffer${riskDateLabel ? ` on ${riskDateLabel}` : ""}`
         : "No agent intervention is active",
       summary: materialRisk
-        ? `${target?.payer_name ?? "The ranked collection"} can repair ${aud(
+        ? `Cash falls ${aud(
             target?.repair_cents ?? forecast.repair_amount_cents,
-          )} of the first gap. Runway keeps the provider evidence and simulated context separate.`
+          )} short of your buffer${riskDateLabel ? ` on ${riskDateLabel}` : " then"} — ${
+            target
+              ? `${possessive(target.payer_name)} overdue ${aud(target.amount_cents)} invoice can cover it`
+              : "collecting the ranked overdue invoice can cover it"
+          }.`
         : "Runway is watching connected cash, collections and finance-relevant commitments. Inject the demo bill to run the golden path.",
       riskDate: forecast?.material_risk_date ?? null,
       projectedLowCents: forecast?.cash_only.low_cents ?? null,
@@ -336,4 +352,18 @@ function aud(cents: number): string {
     currency: "AUD",
     maximumFractionDigits: 0,
   }).format(cents / 100);
+}
+
+function possessive(name: string): string {
+  return name.endsWith("s") ? `${name}'` : `${name}'s`;
+}
+
+function shortDate(iso: string | null): string | null {
+  if (!iso) return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
 }

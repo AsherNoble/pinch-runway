@@ -62,6 +62,12 @@ select {
   text-transform: uppercase;
 }
 
+/* A little extra room before this specific title - it's longer and denser
+   than a typical panel heading, so the default gap reads tight against it. */
+.agent-risk-copy .eyebrow {
+  margin-bottom: 12px;
+}
+
 h1,
 h2,
 h3,
@@ -1031,12 +1037,13 @@ h3 {
   line-height: 1.52;
 }
 
-.agent-badge-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 7px;
+/* The global h2 (line-height 1.05, letter-spacing -0.035em) is tuned for a
+   short, fixed headline. This title is longer and number-dense (currency,
+   dates), so the same tight tracking reads as cramped rather than punchy,
+   and jars against the looser paragraph immediately below it. */
+#agent-risk-title {
+  line-height: 1.24;
+  letter-spacing: -0.015em;
 }
 
 .agent-action-state,
@@ -1157,27 +1164,48 @@ h3 {
   background: #fee8e3;
 }
 
-.agent-recommended-action {
-  display: inline-grid;
-  gap: 5px;
-  border-radius: 13px;
-  padding: 13px 15px;
+/* One unified status element, replacing the old pair of badge pill +
+   "Runway's move" box that described the same fact two different ways. */
+.agent-status-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  border-radius: 999px;
+  padding: 9px 15px 9px 12px;
+  font-size: 0.87rem;
+  font-weight: 650;
+  letter-spacing: -0.005em;
+}
+
+.agent-status-mark {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.agent-status-done {
+  color: #1f6646;
+  background: #ddf0dd;
+}
+
+.agent-status-done .agent-status-mark {
+  color: #eafbef;
+  background: #2f8f5f;
+}
+
+.agent-status-pending {
+  color: #0e382a;
+  background: var(--mint);
+}
+
+.agent-status-pending .agent-status-mark {
   color: #f8f6ed;
   background: var(--forest);
-}
-
-.agent-recommended-action span {
-  color: #b9dcbc;
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
-  font-size: 0.63rem;
-  font-weight: 750;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.agent-recommended-action strong {
-  font-size: 0.92rem;
-  letter-spacing: -0.015em;
 }
 
 .agent-risk-stats {
