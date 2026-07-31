@@ -2200,14 +2200,37 @@ h3 {
   border-radius: 12px;
   padding: 10px 14px;
   color: #f8f6ed;
-  background: var(--forest);
   box-shadow: 0 12px 32px rgba(23, 38, 31, 0.2);
   font-size: 0.76rem;
-  transition: background-color 0.15s ease;
+  opacity: 1;
+  transition:
+    background-color 0.15s ease,
+    opacity 0.25s ease;
 }
 
-.agent-control-message:hover {
+/* Matches the 250ms cleanup delay in the component that unmounts the
+   toast once this finishes playing. */
+.agent-control-message-leaving {
+  opacity: 0;
+}
+
+/* Success and error share the same shape/position above - only the color
+   differs, so a failed save doesn't read identically to a completed one. */
+.agent-control-message-success {
+  background: var(--forest);
+}
+
+.agent-control-message-success:hover {
   background: var(--forest-deep);
+}
+
+.agent-control-message-error {
+  border-color: rgba(137, 56, 46, 0.35);
+  background: var(--coral);
+}
+
+.agent-control-message-error:hover {
+  background: #c8593f;
 }
 
 .agent-empty {

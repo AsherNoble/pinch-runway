@@ -501,7 +501,7 @@ function BufferControl({
   bufferMode: "auto" | "manual";
   dailySpendCents: number;
   endpoint?: string;
-  onMessage: (message: string) => void;
+  onMessage: (message: string, kind?: "success" | "error") => void;
   onSaved: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -557,6 +557,7 @@ function BufferControl({
         error instanceof Error
           ? error.message
           : "Runway could not update the buffer.",
+        "error",
       );
     } finally {
       setSaving(false);
@@ -566,7 +567,7 @@ function BufferControl({
   function submitManualBuffer() {
     const dollars = Number(manualInput.replaceAll(",", "").trim());
     if (!Number.isFinite(dollars) || dollars <= 0) {
-      onMessage("Enter a buffer amount greater than zero.");
+      onMessage("Enter a buffer amount greater than zero.", "error");
       return;
     }
     void saveMode({ mode: "manual", manualCents: Math.round(dollars * 100) });
@@ -721,6 +722,10 @@ export function AgentCommandCenter({
     null,
   );
   const [message, setMessage] = useState("");
+  const [messageKind, setMessageKind] = useState<"success" | "error">(
+    "success",
+  );
+  const [messageVisible, setMessageVisible] = useState(false);
   const [messageHovered, setMessageHovered] = useState(false);
   const [copiedLinkId, setCopiedLinkId] = useState<string | null>(null);
   // Starts at the SSR-matching default and syncs from localStorage after
@@ -742,14 +747,30 @@ export function AgentCommandCenter({
     window.localStorage.setItem(SOURCE_VIEW_STORAGE_KEY, view);
   }
 
-  // Auto-dismiss the status toast after a few seconds, unless the user is
-  // actively hovering it. Re-runs (and restarts the timer) whenever the
-  // message text or hover state changes.
+  function showMessage(text: string, kind: "success" | "error" = "success") {
+    setMessage(text);
+    setMessageKind(kind);
+    setMessageVisible(true);
+  }
+
+  // Auto-dismiss the status toast after 4s, unless the user is actively
+  // hovering it. Re-runs (and restarts the timer) whenever the message text
+  // or hover state changes. This only starts the fade (see below) - it
+  // doesn't unmount the toast directly, so the CSS opacity transition has
+  // something to animate instead of the element just vanishing.
   useEffect(() => {
     if (!message || messageHovered) return;
-    const timeout = setTimeout(() => setMessage(""), 6_000);
+    const timeout = setTimeout(() => setMessageVisible(false), 4_000);
     return () => clearTimeout(timeout);
   }, [message, messageHovered]);
+
+  // Once the fade-out finishes playing, actually remove the toast from the
+  // DOM. Duration here must match .agent-control-message's transition time.
+  useEffect(() => {
+    if (messageVisible || !message) return;
+    const timeout = setTimeout(() => setMessage(""), 250);
+    return () => clearTimeout(timeout);
+  }, [messageVisible, message]);
   const pendingApprovals = model.approvals.filter(
     (approval) => !resolvedApprovals.includes(approval.id),
   );
@@ -778,12 +799,13 @@ export function AgentCommandCenter({
         ...current,
         [actionClass]: body.mode ?? mode,
       }));
-      setMessage("Permission updated.");
+      showMessage("Permission updated.");
     } catch (error) {
-      setMessage(
+      showMessage(
         error instanceof Error
           ? error.message
           : "Runway could not update that permission.",
+        "error",
       );
     } finally {
       setBusyPermission(null);
@@ -815,7 +837,7 @@ export function AgentCommandCenter({
         throw new Error(body.error ?? "Runway could not record that decision.");
       }
       setResolvedApprovals((current) => [...current, approvalId]);
-      setMessage(
+      showMessage(
         body.message ??
           (decision === "approve"
             ? "Approved. Runway completed the action."
@@ -824,10 +846,11 @@ export function AgentCommandCenter({
       // Pull the server state so the audit timeline reflects the new outcome.
       router.refresh();
     } catch (error) {
-      setMessage(
+      showMessage(
         error instanceof Error
           ? error.message
           : "Runway could not record that decision.",
+        "error",
       );
     } finally {
       setBusyApproval(null);
@@ -852,17 +875,18 @@ export function AgentCommandCenter({
       }
       // The full agent narrative belongs in the Agent activity timeline, not
       // this transient toast — refresh so the timeline picks up the new run.
-      setMessage(
+      showMessage(
         action === "trigger"
           ? "Scenario event received. See Agent activity below for what Runway did."
           : "Scenario reset. You’re ready for another run.",
       );
       router.refresh();
     } catch (error) {
-      setMessage(
+      showMessage(
         error instanceof Error
           ? error.message
           : `Runway could not ${action} the demo scenario.`,
+        "error",
       );
     } finally {
       setPresenterBusy(null);
@@ -888,16 +912,17 @@ export function AgentCommandCenter({
         throw new Error(body.error ?? "Runway could not update the heartbeat.");
       }
       setHeartbeatEnabled(body.enabled ?? enabled);
-      setMessage(
+      showMessage(
         (body.enabled ?? enabled)
           ? "Hourly heartbeat enabled. Runway will check mock finance, inbox and calendar context on the next hourly run."
           : "Hourly heartbeat paused. Existing history remains available.",
       );
     } catch (error) {
-      setMessage(
+      showMessage(
         error instanceof Error
           ? error.message
           : "Runway could not update the heartbeat.",
+        "error",
       );
     } finally {
       setHeartbeatBusy(false);
@@ -1077,7 +1102,7 @@ export function AgentCommandCenter({
               bufferMode={model.forecast.bufferMode}
               dailySpendCents={model.forecast.bufferDailySpendCents}
               endpoint={endpoints.riskBuffer}
-              onMessage={setMessage}
+              onMessage={showMessage}
               onSaved={() => router.refresh()}
             />
           </div>
@@ -1432,7 +1457,9 @@ export function AgentCommandCenter({
 
       {message ? (
         <p
-          className="agent-control-message"
+          className={`agent-control-message agent-control-message-${messageKind}${
+            messageVisible ? "" : " agent-control-message-leaving"
+          }`}
           onMouseEnter={() => setMessageHovered(true)}
           onMouseLeave={() => setMessageHovered(false)}
           role="status"
